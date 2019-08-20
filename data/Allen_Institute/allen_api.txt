@@ -1,0 +1,24 @@
+Contrast call:
+http://api.brain-map.org/api/v2/data/query.csv?criteria=service::mouse_differential[set$eq'mouse'][structures1$eq1097][structures2$eq693][threshold2$eq2,50]
+
+structures1 =
+HY: 1097
+
+structures2 = 
+VMH: 693
+ARH: 223
+DMH: 830
+LHA: 194
+RCH: 800
+SCH: 286
+AHN: 88
+TU: 614
+SO: 390
+PVH: 38
+SBPV: 347
+PVi: 118
+ZI: 797
+PH: 946
+PMv: 1004
+PMd: 980
+TM: 557

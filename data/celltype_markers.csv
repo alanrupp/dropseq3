@@ -1,0 +1,83 @@
+gene,cells,paper
+Acta2,Mural Cell,"Saunders2018, Mickelsen2019"
+Adm,Tanycyte,Campbell2017
+Agt,Astrocyte,"Chen2017, Mickelsen2019"
+Aif1,Microglia,"Campbell2017, Dai2019"
+Aldh1l1,Astrocyte,Dai2019
+Aldoc,Astrocyte,Dai2019
+Aqp4,Astrocyte,"Saunders2018, Mickelsen2019"
+Bmp4,Oligodendrocyte,Campbell2017
+C1qa,Macrophage / Microglia,Mickelsen2019
+C1qb,Macrophage / Microglia,Saunders2018
+Ccdc153,Ependymocyte,"Campbell2017, Chen2017"
+Cck,Pars Tuberalis,Campbell2017
+Clu,Astrocyte,Dai2019
+Cnp,Oligodendrocyte,Dai2019
+Coch,Choroid Plexus,Saunders2018
+Col1a1,Fibroblast,Campbell2017
+Col1a2,Fibroblast,Mickelsen2019
+Col3a1,Fibroblast,Campbell2017
+Cspg4,Oligodendrocyte Progenitor Cell,"Campbell2017, Saunders2018, Mickelsen2019"
+Cx3cr1,Macrophage / Microglia,"Macosko2015, Mickelsen2019"
+Cyp2l2,Pars Tuberalis,Campbell2017
+Dcn,Fibroblast,Saunders2018
+Dcx,Neuron,Dai2019
+Elavl2,Neuron,Mickelsen2019
+Flt1,Endothelial,"Saunders2018, Mickelsen2019"
+Fyn,Newly Formed Oligodendrocyte,"Chen2017, Mickelsen2019"
+Gad1,Neuron,"Macosko2015, Dai2019"
+Gad2,Neuron,me
+Gfap,Astrocyte,"Macosko2015, Campbell2017, Mickelsen2019, Dai2019"
+Ghrh,Neuron,Campbell2017
+Gja1,Astrocyte,"Saunders2018, Mickelsen2019, Dai2019"
+Hba-a1,Red Blood Cell,Mickelsen2019
+Igfbpl1,Fibroblast,Saunders2018
+Itgam,Microglia,Dai2019
+Lum,Fibroblast,Campbell2017
+Mag,Oligodendrocyte,"Campbell2017, Mickelsen2019"
+Man1a,Oligodendrocyte,Campbell2017
+Mbp,Oligodendrocyte,Saunders2018
+Meg3,Neuron,me
+Mobp,Oligodendrocyte,Chen2017
+Mrc1,Macrophage,"Chen2017, Mickelsen2019"
+Mustn1,Mural Cell,Campbell2017
+Myh11,Endothelial,Chen2017
+Ndrg2,Astrocyte,Dai2019
+Olig1,Oligodendrocyte,Mickelsen2019
+Opalin,Oligodendrocyte,Mickelsen2019
+Oxt,Neuron,Campbell2017
+P2ry12,Macrophage / Microglia,Saunders2018
+Pax6,Neuron,Macosko2015
+Pdgfra,Oligodendrocyte Progenitor Cell,"Chen2017, Mickelsen2019"
+Plp1,Oligodendrocyte,"Saunders2018, Dai2019"
+Ppap2b,Astrocyte,Dai2019
+Ptprc,Microglia,Dai2019
+Rax,Tanycyte,"Campbell2017, Chen2017"
+Rbfox3,Neuron,Saunders2018
+Reln,Neuron,Dai2019
+Rgs5,Mural Cell,Saunders2018
+Rgs16,Neuron,Campbell2017
+Slc1a3,Astrocyte,Dai2019
+Slc4a4,Astrocyte,Dai2019
+Slc6a9,Neuron,Macosko2015
+Slc7a10,Astrocyte,Mickelsen2019
+Slc12a5,Neuron,Dai2019
+Slc17a6,Neuron,me
+Slc18a2,Neuron,Campbell2017
+Slc32a1,Neuron,me
+Slc38a5,Endothelial,Chen2017
+Snap25,Neuron,"Chen2017, Mickelsen2019"
+Snhg11,Neuron,me
+Syp,Neuron,Mickelsen2019
+Syt1,Neuron,Chen2017
+Tac2,Neuron,Campbell2017
+Tgfbi,Choroid Plexus,Saunders2018
+Timeless,Pars Tuberalis,Campbell2017
+Tlr2,Microglia,Dai2019
+Tlr7,Microglia,Dai2019
+Tmem119,Microglia,Mickelsen2019
+Tnr,Oligodendrocyte Progenitor Cell,Saunders2018
+Top2a,Proliferating Oligodendrocyte Progenitor Cell,Chen2017
+Trf,Oligodendrocyte,Saunders2018
+Tshb,Pars Tuberalis,Campbell2017
+Tubb3,Neuron,"Campbell2017, Mickelsen2019"

@@ -1,0 +1,260 @@
+id,name,gene-id,gene-symbol,gene-name,entrez-id,chromosome,plane-of-section,specimen-id,fold-change,target-sum,contrast-sum,num-target-samples,num-contrast-samples
+79591671,RP_071204_04_G06,14356,Gfap,glial fibrillary acidic protein,14580,11,coronal,n/a,3.123,40.283,4926.952,5,1910
+71016631,RP_050725_03_A12,21801,Trh,thyrotropin releasing hormone,22044,6,coronal,n/a,2.285,52.696,9377.998,5,2033
+793,RP_Baylor_102956,18393,Per2,period homolog 2 (Drosophila),18627,1,coronal,n/a,2.273,46.154,8257.090,5,2033
+77866882,RP_070129_02_A05,19005,Ptn,pleiotrophin,19242,6,coronal,n/a,1.964,34.465,10960.240,3,1874
+45666,RP_040324_01_H03,21953,Ube2i,ubiquitin-conjugating enzyme E2I,22196,17,coronal,n/a,1.645,49.751,11781.192,5,1948
+72340123,RP_051101_02_A04,15344,Elavl2,"ELAV (embryonic lethal, abnormal vision, Drosophila)-like 2 (Hu antigen B)",15569,4,coronal,n/a,1.601,47.055,11952.961,5,2033
+79568026,RP_071204_02_B03,12349,Cdh8,cadherin 8,12564,8,coronal,n/a,1.538,45.220,13375.114,4,1820
+71670705,RP_050517_01_D03,35831,Txn2,thioredoxin 2,56551,15,coronal,n/a,1.504,48.007,14607.518,4,1830
+75749783,RP_060518_01_B04,87243,Parm1,prostate androgen-regulated mucin-like protein 1,231440,5,coronal,n/a,1.472,37.758,9616.615,5,1874
+73769324,RP_051121_04_B09,21618,Timp3,tissue inhibitor of metalloproteinase 3,21859,10,coronal,n/a,1.405,40.138,11615.765,5,2033
+75988646,RP_060620_02_E08,84857,D10Bwg1379e,"DNA segment, Chr 10, Brigham & Women's Genetics 1379 expressed",215821,10,coronal,n/a,1.402,26.506,12335.422,3,1957
+75773699,RP_060530_01_A05,11843,Opn1sw,"opsin 1 (cone pigments), short-wave-sensitive (color blindness, tritan)",12057,6,coronal,n/a,1.402,37.503,10280.148,5,1921
+851,RP_Baylor_102986,18978,Ptgds,prostaglandin D2 synthase (brain),19215,2,coronal,n/a,1.380,59.808,17625.947,5,2033
+75651233,RP_060518_01_D11,22074,Vamp1,vesicle-associated membrane protein 1,22317,6,coronal,n/a,1.365,76.105,22669.176,5,2033
+75038432,RP_060412_04_A02,16263,Kcna2,"potassium voltage-gated channel, shaker-related subfamily, member 2",16490,3,coronal,n/a,1.360,46.797,13993.798,5,2033
+76097699,RP_060620_02_A04,46987,Golga7b,"golgi autoantigen, golgin subfamily a, 7B",71146,19,coronal,n/a,1.330,49.605,13237.071,5,1774
+73615805,RP_050818_01_F01,37281,BC100451,cDNA sequence BC100451,58251,11,coronal,n/a,1.319,43.934,13172.053,5,1978
+71924238,RP_050607_03_F01,52217,Slc24a2,"solute carrier family 24 (sodium/potassium/calcium exchanger), member 2",76376,4,coronal,n/a,1.256,51.976,16824.775,5,2033
+67752111,RP_040922_01_C04,14028,Flot1,flotillin 1,14251,17,coronal,n/a,1.240,68.141,20527.381,4,1494
+72472805,RP_051101_02_F09,14362,Gfra2,glial cell line derived neurotrophic factor family receptor alpha 2,14586,14,coronal,n/a,1.237,38.928,12791.787,5,2033
+79556704,RP_071204_01_D07,18587,Plp1,proteolipid protein (myelin) 1,18823,X,coronal,n/a,1.218,92.920,34546.223,4,1812
+2055,RP_040324_01_B11,35666,B4galt6,"UDP-Gal:betaGlcNAc beta 1,4-galactosyltransferase, polypeptide 6",56386,18,coronal,n/a,1.209,64.611,21730.676,5,2033
+75749390,RP_060518_01_B07,18182,Hspa4l,heat shock protein 4 like,18415,3,coronal,n/a,1.206,85.385,28783.723,5,2033
+275874,RP_040604_02_F08,35638,Copz2,"coatomer protein complex, subunit zeta 2",56358,11,coronal,n/a,1.200,44.130,13566.208,5,1844
+75651234,RP_060518_01_D12,17724,Napb,N-ethylmaleimide sensitive fusion protein attachment protein beta,17957,2,coronal,n/a,1.196,103.314,35134.820,5,2033
+77887874,RP_070208_04_A05,17878,Nnat,neuronatin,18111,2,coronal,n/a,1.164,60.031,24680.900,3,1436
+74988529,RP_060315_05_E08,12238,Ccni,cyclin I,12453,5,coronal,n/a,1.163,39.618,13323.604,5,1956
+74271623,RP_060202_01_A01,85127,Ppp1r9b,"protein phosphatase 1, regulatory subunit 9B",217124,11,coronal,n/a,1.150,82.022,27072.113,5,1898
+74658130,RP_060220_02_C08,12757,Cs,citrate synthase,12974,10,coronal,n/a,1.146,48.236,27018.312,3,1926
+75259440,RP_051214_02_B10,44819,Haghl,hydroxyacylglutathione hydrolase-like,68977,17,coronal,n/a,1.141,58.552,20332.074,5,1981
+74881263,RP_060315_01_A02,87535,Atp1a3,"ATPase, Na+/K+ transporting, alpha 3 polypeptide",232975,7,coronal,n/a,1.135,112.552,40307.441,5,2033
+73788443,RP_051213_01_B02,20454,Sparc,secreted acidic cysteine rich glycoprotein,20692,11,coronal,n/a,1.124,56.739,20530.295,5,2033
+367,RP_Baylor_103347,82067,Ripply3,ripply3 homolog (zebrafish),170765,16,coronal,n/a,1.116,114.588,41747.266,5,2033
+74957912,RP_060315_05_A09,22090,Vdac1,voltage-dependent anion channel 1,22333,11,coronal,n/a,1.111,87.696,32096.270,5,2033
+74581382,RP_051214_01_C07,82040,Znrf1,zinc and ring finger 1,170737,8,coronal,n/a,1.108,38.648,15095.303,4,1731
+74581371,RP_051012_01_E12,130582,LOC434002,hypothetical gene supported by AK018238; AK046289,434002,6,coronal,n/a,1.106,137.083,50403.125,5,2033
+71247618,RP_050331_03_B07,14582,Grik2,"glutamate receptor, ionotropic, kainate 2 (beta 2)",14806,10,coronal,n/a,1.105,46.744,17207.232,5,2033
+71836833,RP_051017_02_B08,86381,Ina,"internexin neuronal intermediate filament protein, alpha",226180,19,coronal,n/a,1.103,108.461,39985.203,5,2033
+72472806,RP_051101_02_F10,14453,Gnai1,"guanine nucleotide binding protein (G protein), alpha inhibiting 1",14677,5,coronal,n/a,1.095,41.069,15244.597,5,2033
+70928293,RP_050725_02_C08,68168,Rtn1,reticulon 1,104001,12,coronal,n/a,1.091,143.550,53513.219,5,2033
+71358628,RP_050725_03_F06,14578,Gria4,"glutamate receptor, ionotropic, AMPA4 (alpha 4)",14802,9,coronal,n/a,1.090,95.090,35487.324,5,2033
+75651232,RP_060518_01_D10,41624,Arl6ip5,ADP-ribosylation factor-like 6 interacting protein 5,65106,6,coronal,n/a,1.087,72.245,27021.902,5,2033
+45668,RP_040324_01_H05,32320,Dbndd2,dysbindin (dystrobrevin binding protein 1) domain containing 2,52840,2,coronal,n/a,1.086,89.305,37155.016,4,1808
+71587899,RP_050725_03_G03,19657,Rph3a,rabphilin 3A,19894,5,coronal,n/a,1.080,58.720,22100.980,5,2033
+74882697,RP_060315_04_G03,46645,Pgrmc2,progesterone receptor membrane component 2,70804,3,coronal,n/a,1.079,36.454,13731.225,5,2033
+74658140,RP_060220_02_C09,43523,Sdhb,"succinate dehydrogenase complex, subunit B, iron sulfur (Ip)",67680,4,coronal,n/a,1.078,85.651,32297.984,5,2033
+276272,RP_040609_01_D05,48310,Plcd3,"phospholipase C, delta 3",72469,11,coronal,n/a,1.072,51.107,18891.150,4,1585
+70634234,RP_050725_01_E08,70024,Csdc2,"cold shock domain containing C2, RNA binding",105859,15,coronal,n/a,1.072,57.797,21928.328,5,2033
+74047921,RP_051214_02_D06,106590,Podxl2,podocalyxin-like 2,319655,6,coronal,n/a,1.071,112.916,42865.707,5,2033
+74881517,RP_060315_04_C05,11576,Apc,adenomatosis polyposis coli,11789,18,coronal,n/a,1.070,40.932,15552.765,5,2033
+74988551,RP_060315_05_E11,43375,Mfap1a,microfibrillar-associated protein 1A,67532,2,coronal,n/a,1.058,50.572,18361.260,5,1921
+74881516,RP_060315_04_C04,11250,Actb,"actin, beta",11461,5,coronal,n/a,1.058,142.049,50064.094,5,1864
+74047918,RP_051214_02_D03,14421,Glul,glutamate-ammonia ligase (glutamine synthetase),14645,1,coronal,n/a,1.053,80.767,30001.654,5,1956
+71717144,RP_050524_02_A11,87361,Fam190a,"family with sequence similarity 190, member A",232035,6,coronal,n/a,1.048,35.520,13784.360,5,2033
+71836834,RP_051017_02_B09,26968,Trp53bp1,transformation related protein 53 binding protein 1,27223,2,coronal,n/a,1.041,61.261,23937.174,5,2033
+74641317,RP_060220_02_E05,87892,Aars,alanyl-tRNA synthetase,234734,8,coronal,n/a,1.037,61.346,24061.258,5,2033
+2519,RP_040324_01_B02,19150,Rangap1,RAN GTPase activating protein 1,19387,15,coronal,n/a,1.035,114.913,45131.680,5,2033
+74511880,RP_051121_04_A01,52282,Daam2,dishevelled associated activator of morphogenesis 2,76441,17,coronal,n/a,1.033,38.726,15245.279,5,2033
+104826,RP_040420_01_B12,11819,Bcap29,B cell receptor associated protein 29,12033,12,coronal,n/a,1.032,49.922,19663.826,5,2033
+70928292,RP_050725_02_C07,18377,Pea15a,phosphoprotein enriched in astrocytes 15A,18611,1,coronal,n/a,1.031,76.931,28777.072,5,1929
+74658160,RP_060220_02_C11,14564,Gpr162,G protein-coupled receptor 162,14788,6,coronal,n/a,1.031,78.209,30851.203,5,2033
+74658111,RP_060220_02_C07,84840,Ccdc92,coiled-coil domain containing 92,215707,5,coronal,n/a,1.026,69.675,27599.625,5,2033
+74272037,RP_060202_01_A04,17523,Mtap2,microtubule-associated protein 2,17756,1,coronal,n/a,1.025,97.732,36387.957,5,1909
+75651138,RP_060518_01_A01,12587,Cntfr,ciliary neurotrophic factor receptor,12804,4,coronal,n/a,1.025,49.151,17191.619,5,1793
+72103831,RP_051017_03_D11,12134,Car2,carbonic anhydrase 2,12349,3,coronal,n/a,1.024,55.066,21857.688,5,2033
+72081482,RP_051017_01_C07,12277,Scarb2,"scavenger receptor class B, member 2",12492,5,coronal,n/a,1.023,63.697,25314.797,5,2033
+75774675,RP_060530_01_C12,68130,Rpn1,ribophorin I,103963,6,coronal,n/a,1.023,73.020,26999.672,5,1891
+276274,RP_040609_01_D07,51667,Senp2,SUMO/sentrin specific peptidase 2,75826,16,coronal,n/a,1.015,31.932,15941.692,4,2026
+80517057,RP_071128_03_B12,84008,Hmgcs1,3-hydroxy-3-methylglutaryl-Coenzyme A synthase 1,208715,13,coronal,n/a,1.014,24.914,15267.363,3,1864
+2159,RP_040324_01_B05,13255,Reep5,receptor accessory protein 5,13476,18,coronal,n/a,1.013,86.162,34593.324,5,2033
+73931635,RP_051214_04_B03,129841,Acsl5,acyl-CoA synthetase long-chain family member 5,433256,19,coronal,n/a,1.012,164.693,52680.637,5,1619
+70634224,RP_050725_01_E07,42113,Fam134b,"family with sequence similarity 134, member B",66270,15,coronal,n/a,1.011,50.378,20256.232,5,2033
+75042254,RP_060412_02_C08,20103,Glg1,golgi apparatus protein 1,20340,8,coronal,n/a,1.010,86.332,34747.414,5,2033
+74958576,RP_060315_05_B06,67179,6720401G13Rik,RIKEN cDNA 6720401G13 gene,103012,X,coronal,n/a,1.008,44.441,17934.971,5,2033
+74882698,RP_060315_04_G04,92804,Ppp2r2c,"protein phosphatase 2 (formerly 2A), regulatory subunit B (PR 52), gamma isoform",269643,5,coronal,n/a,1.007,57.170,23076.295,5,2033
+112646029,RP_110407_01_C06,16647,Lhx9,LIM homeobox protein 9,16876,1,coronal,n/a,1.004,116.994,47397.695,5,2033
+74357551,RP_051214_01_B03,45779,Scrn1,secernin 1,69938,6,coronal,n/a,1.002,71.266,27637.816,5,1943
+71836832,RP_051017_02_B07,87954,BC018242,cDNA sequence BC018242,235044,9,coronal,n/a,0.994,72.626,29701.139,5,2033
+509,RP_040507_01_H03,14459,Gnas,"GNAS (guanine nucleotide binding protein, alpha stimulating) complex locus",14683,2,coronal,n/a,0.986,83.620,34495.879,5,2033
+73817934,RP_051214_01_A05,13405,Eef1a1,eukaryotic translation elongation factor 1 alpha 1,13627,9,coronal,n/a,0.982,141.778,58698.367,5,2033
+75042251,RP_060412_02_C05,21784,Hsp90b1,"heat shock protein 90, beta (Grp94), member 1",22027,10,coronal,n/a,0.981,97.898,40574.828,5,2033
+74881548,RP_060315_04_C09,26967,Atp1a4,"ATPase, Na+/K+ transporting, alpha 4 polypeptide",27222,1,coronal,n/a,0.976,50.643,21088.031,5,2033
+74272036,RP_060202_01_A03,13781,Chchd2,coiled-coil-helix-coiled-coil-helix domain containing 2,14004,5,coronal,n/a,0.972,94.737,39639.383,5,2033
+276075,RP_040609_01_C07,74235,Pygb,brain glycogen phosphorylase,110078,2,coronal,n/a,0.967,37.588,15798.194,5,2033
+618,RP_040324_01_B06,16367,Klc2,kinesin light chain 2,16594,19,coronal,n/a,0.963,56.698,23943.643,5,2033
+71358627,RP_050725_03_F05,48526,Dnajc6,"DnaJ (Hsp40) homolog, subfamily C, member 6",72685,4,coronal,n/a,0.962,79.776,33709.316,5,2033
+71836836,RP_051017_02_B11,18815,Ppp2ca,"protein phosphatase 2 (formerly 2A), catalytic subunit, alpha isoform",19052,11,coronal,n/a,0.962,58.583,21307.025,5,1749
+74819497,RP_060315_02_F12,12949,Dbnl,drebrin-like,13169,11,coronal,n/a,0.958,50.447,21417.676,5,2033
+72081395,RP_051017_01_C01,86648,Gsn,gelsolin,227753,2,coronal,n/a,0.957,35.847,15222.847,5,2033
+1079,RP_Baylor_103090,21886,Ttc3,tetratricopeptide repeat domain 3,22129,16,coronal,n/a,0.954,97.356,41473.195,5,2033
+356284,RP_040617_02_D06,43721,Tmem33,transmembrane protein 33,67878,5,coronal,n/a,0.953,37.609,16401.682,4,1662
+74957911,RP_060315_05_A08,85060,Usp22,ubiquitin specific peptidase 22,216825,11,coronal,n/a,0.953,56.953,21366.617,5,1787
+69120555,RP_050330_01_A08,12793,Cst3,cystatin C,13010,2,coronal,n/a,0.950,114.409,48878.652,5,2029
+76097701,RP_060620_02_A06,69050,Tmem179,transmembrane protein 179,104885,12,coronal,n/a,0.946,59.319,25493.557,5,2033
+74819250,RP_060315_02_D02,20013,Scd2,stearoyl-Coenzyme A desaturase 2,20250,19,coronal,n/a,0.942,78.741,33113.777,5,1981
+79490114,RP_070212_01_A02,12543,Clu,clusterin,12759,14,coronal,n/a,0.942,92.088,39751.418,5,2033
+73994668,RP_051214_03_E03,63496,Garnl3,GTPase activating RANGAP domain-like 3,99326,2,coronal,n/a,0.933,76.237,31135.426,5,1905
+75042242,RP_051219_02_C11,88990,Rims3,regulating synaptic membrane exocytosis 3,242662,4,coronal,n/a,0.932,76.773,33509.547,5,2033
+74658245,RP_060220_02_D11,18219,P4hb,"prolyl 4-hydroxylase, beta polypeptide",18453,11,coronal,n/a,0.931,77.366,31386.934,5,1888
+112194293,RP_110421_01_E04,36595,Park7,"Parkinson disease (autosomal recessive, early onset) 7",57320,4,coronal,n/a,0.927,53.492,23457.627,5,2033
+77887858,RP_070208_04_A01,26184,Psg16,pregnancy specific glycoprotein 16,26436,7,coronal,n/a,0.925,69.817,36492.805,4,1934
+71836872,RP_051017_02_E02,52809,Chst1,carbohydrate (keratan sulfate Gal-6) sulfotransferase 1,76969,2,coronal,n/a,0.924,49.956,21972.818,5,2033
+74819476,RP_060315_02_F09,11559,Ap2a2,"adaptor protein complex AP-2, alpha 2 subunit",11772,7,coronal,n/a,0.919,50.253,20391.330,5,1865
+71836880,RP_051017_02_E10,12947,Dbi,diazepam binding inhibitor,13167,1,coronal,n/a,0.916,41.076,18237.549,5,2033
+112202838,RP_110421_01_F01,16965,Mbp,myelin basic protein,17196,18,coronal,n/a,0.911,69.241,37540.195,4,1976
+75147760,RP_051206_02_H12,44246,Nrn1,neuritin 1,68404,13,coronal,n/a,0.911,35.698,13916.354,5,1776
+112197625,RP_110421_01_F07,13585,Eno2,"enolase 2, gamma neuronal",13807,6,coronal,n/a,0.909,130.786,58481.883,5,2033
+79568051,RP_071204_02_C04,29546,Ndrg2,N-myc downstream regulated gene 2,29811,14,coronal,n/a,0.908,50.343,16604.215,4,1198
+293472,RP_040604_02_G10,85136,Stac2,SH3 and cysteine rich domain 2,217154,11,coronal,n/a,0.900,101.194,41633.438,5,1852
+74658089,RP_060220_02_C03,16353,Kifc5b,kinesin family member C5B,16580,17,coronal,n/a,0.897,41.239,17338.879,5,1886
+71717155,RP_050524_03_C10,89280,Olfm2,olfactomedin 2,244723,9,coronal,n/a,0.883,45.794,21089.367,5,2033
+73994671,RP_051214_03_E06,15704,Ids,iduronate 2-sulfatase,15931,X,coronal,n/a,0.876,57.169,26541.197,5,2033
+71924087,RP_051017_02_H10,73834,Ank2,"ankyrin 2, brain",109676,3,coronal,n/a,0.874,75.846,33920.172,5,1954
+67779873,RP_040922_01_E05,33454,Copg,"coatomer protein complex, subunit gamma",54161,6,coronal,n/a,0.854,103.424,48159.719,5,1988
+75651167,RP_060518_01_C02,62852,Mfsd6,major facilitator superfamily domain containing 6,98682,1,coronal,n/a,0.853,38.550,17729.777,5,1961
+67779877,RP_040922_01_E10,12813,Ctsb,cathepsin B,13030,14,coronal,n/a,0.848,109.339,52380.812,5,2031
+2487,RP_040324_01_B01,18581,Plk1,polo-like kinase 1,18817,7,coronal,n/a,0.847,43.386,19037.492,5,1859
+72340122,RP_051101_02_A03,20507,Spock1,"sparc/osteonectin, cwcv and kazal-like domains proteoglycan 1",20745,13,coronal,n/a,0.847,54.413,26101.242,5,2031
+293474,RP_040604_02_G12,45615,Ms4a6b,"membrane-spanning 4-domains, subfamily A, member 6B",69774,19,coronal,n/a,0.841,76.443,36963.473,5,2033
+74641315,RP_060220_02_E02,11750,Atp6v1a,"ATPase, H+ transporting, lysosomal V1 subunit A",11964,16,coronal,n/a,0.837,36.346,17648.084,5,2033
+77414654,RP_070205_01_H12,18377,Pea15a,phosphoprotein enriched in astrocytes 15A,18611,1,coronal,n/a,0.835,60.314,29223.100,5,2022
+72081556,RP_051017_01_D09,43786,Mesdc2,mesoderm development candidate 2,67943,7,coronal,n/a,0.829,41.312,20043.900,5,2010
+73592532,RP_051017_01_E08,47605,C2cd2l,C2 calcium-dependent domain containing 2-like,71764,9,coronal,n/a,0.828,38.611,18952.828,5,2033
+77414652,RP_070205_01_H10,40895,Itm2c,integral membrane protein 2C,64294,1,coronal,n/a,0.826,94.984,42840.367,5,1862
+75773700,RP_060530_01_A06,20292,Slc31a2,"solute carrier family 31, member 2",20530,4,coronal,n/a,0.825,39.987,19714.574,5,2033
+112647321,RP_110407_02_F01,14349,Gdnf,glial cell line derived neurotrophic factor,14573,15,coronal,n/a,0.825,66.965,27316.602,5,1682
+74988757,RP_060315_05_H01,129895,LOC433311,LOC433311,433311,1,coronal,n/a,0.824,16.557,12893.244,2,1284
+75988633,RP_060620_02_E05,35650,Tagln3,transgelin 3,56370,16,coronal,n/a,0.821,50.084,24487.328,5,2008
+293469,RP_040604_02_G06,33915,Paf1,"Paf1, RNA polymerase II associated factor, homolog (S. cerevisiae)",54624,7,coronal,n/a,0.821,78.443,40997.395,4,1716
+655120,RP_040922_01_A09,11629,Arf3,ADP-ribosylation factor 3,11842,15,coronal,n/a,0.818,72.437,35791.895,5,2022
+74750016,RP_060220_05_E06,13380,Sparcl1,SPARC-like 1,13602,5,coronal,n/a,0.818,65.136,34445.375,4,1730
+777,RP_040315_01_19,29763,Pcsk1n,proprotein convertase subtilisin/kexin type 1 inhibitor,30052,X,coronal,n/a,0.817,57.261,28508.311,5,2033
+79556642,RP_071204_01_A05,14385,Gja1,"gap junction protein, alpha 1",14609,10,coronal,n/a,0.816,36.243,17652.486,4,1589
+112194079,RP_110421_01_E06,47768,Itfg1,integrin alpha FG-GAP repeat containing 1,71927,8,coronal,n/a,0.809,91.061,41425.082,5,1841
+73817935,RP_051214_01_A06,32803,Ube2k,ubiquitin-conjugating enzyme E2K,53323,5,coronal,n/a,0.807,37.498,18896.246,5,2033
+77869861,RP_070205_01_C02,14163,Gaa,"glucosidase, alpha, acid",14387,11,coronal,n/a,0.800,104.418,40703.590,5,1560
+182,RP_Baylor_102653,12099,Calm2,calmodulin 2,12314,17,coronal,n/a,0.800,65.975,33522.492,5,2033
+79490110,RP_070205_01_F04,11603,Apoe,apolipoprotein E,11816,7,coronal,n/a,0.799,46.778,33374.086,3,1711
+74511801,RP_060220_03_A12,84648,Disp2,dispatched homolog 2 (Drosophila),214240,2,coronal,n/a,0.795,92.930,47503.121,5,2033
+71015817,RP_050808_02_A06,14603,Pdia3,protein disulfide isomerase associated 3,14827,2,coronal,n/a,0.791,62.248,32002.967,5,2033
+275873,RP_040604_02_F06,37629,Tpm3,"tropomyosin 3, gamma",59069,3,coronal,n/a,0.788,67.097,34632.090,5,2033
+544712,RP_040625_01_A07,42640,Cntnap2,contactin associated protein-like 2,66797,6,coronal,n/a,0.786,51.321,24338.748,5,1863
+77869130,RP_070205_01_A10,88223,Usp11,ubiquitin specific peptidase 11,236733,X,coronal,n/a,0.782,58.945,30643.223,5,2033
+74512027,RP_060220_03_D04,88990,Rims3,regulating synaptic membrane exocytosis 3,242662,4,coronal,n/a,0.781,54.449,28342.973,5,2033
+71247614,RP_050331_02_H08,88950,Gabbr2,"gamma-aminobutyric acid (GABA) B receptor, 2",242425,4,coronal,n/a,0.780,37.854,22748.371,4,1875
+75084520,RP_060412_04_C10,42268,Pcp4l1,Purkinje cell protein 4-like 1,66425,1,coronal,n/a,0.779,49.864,26018.365,5,2033
+79567709,RP_071204_01_E11,18978,Ptgds,prostaglandin D2 synthase (brain),19215,2,coronal,n/a,0.778,51.061,26673.420,5,2033
+74988768,RP_060315_05_H12,14421,Glul,glutamate-ammonia ligase (glutamine synthetase),14645,1,coronal,n/a,0.778,47.132,24636.307,5,2033
+71836892,RP_051017_02_F10,56654,Maged2,"melanoma antigen, family D, 2",80884,X,coronal,n/a,0.769,45.603,24109.016,5,2033
+227159,RP_040604_01_G09,80178,Wdr5,WD repeat domain 5,140858,2,coronal,n/a,0.763,39.943,21278.994,5,2033
+75774671,RP_060530_01_C08,42906,Tmem246,transmembrane protein 246,67063,4,coronal,n/a,0.761,49.179,24363.010,5,1886
+75650860,RP_060518_02_E01,92920,Vat1l,vesicle amine transport protein 1 homolog-like (T. californica),270097,8,coronal,n/a,0.761,47.729,25495.775,5,2033
+73769319,RP_051121_04_B04,41788,Clstn1,calsyntenin 1,65945,4,coronal,n/a,0.756,92.619,46182.727,5,1886
+74749928,RP_060220_04_F02,26706,Rpl8,ribosomal protein L8,26961,15,coronal,n/a,0.743,60.246,32969.473,5,2033
+74882915,RP_060315_04_H05,29760,Scd3,stearoyl-coenzyme A desaturase 3,30049,19,coronal,n/a,0.740,68.115,34282.219,5,1863
+74881559,RP_060315_04_C11,11770,Atp6v0c,"ATPase, H+ transporting, lysosomal V0 subunit C",11984,17,coronal,n/a,0.740,89.548,49227.523,5,2033
+75043148,RP_051219_01_F08,149916,7420498E04Rik*,RIKEN cDNA 7420498E04 gene (non-RefSeq),0,n/a,coronal,n/a,0.736,93.334,48734.547,4,1538
+67936207,RP_040928_01_A06,40895,Itm2c,integral membrane protein 2C,64294,1,coronal,n/a,0.730,111.197,58699.637,5,1928
+75934529,RP_060530_01_E05,32378,Rnasek,"ribonuclease, RNase K",52898,11,coronal,n/a,0.726,38.739,21706.307,5,2033
+544902,RP_040420_01_H11,70694,Tecr,"trans-2,3-enoyl-CoA reductase",106529,8,coronal,n/a,0.721,104.496,58578.297,5,2020
+73997151,RP_051214_03_F10,26358,Rcn2,reticulocalbin 2,26611,9,coronal,n/a,0.720,44.214,23970.129,5,1952
+74819255,RP_060315_02_D07,11718,Atp1b2,"ATPase, Na+/K+ transporting, beta 2 polypeptide",11932,11,coronal,n/a,0.712,68.839,38841.316,5,2010
+79591685,RP_071204_04_H01,87401,Slc6a1,"solute carrier family 6 (neurotransmitter transporter, GABA), member 1",232333,6,coronal,n/a,0.711,35.256,18869.521,5,1902
+73512348,RP_050713_03_B12,131211,LOC434631,similar to hypothetical protein 4932411G14,434631,Un,coronal,n/a,0.710,43.096,22880.855,5,1886
+275875,RP_040604_02_F09,44709,Rnf122,ring finger protein 122,68867,8,coronal,n/a,0.709,49.899,28630.473,5,2033
+972,RP_Baylor_102959,18440,Slc25a3,"solute carrier family 25 (mitochondrial carrier, phosphate carrier), member 3",18674,10,coronal,n/a,0.701,54.025,31337.535,5,2033
+75042248,RP_060412_02_C01,13227,Dok1,docking protein 1,13448,6,coronal,n/a,0.698,39.359,36773.805,3,1957
+227540,RP_040526_02_C08,20725,Syn1,synapsin I,20964,X,coronal,n/a,0.696,65.565,38328.316,5,2033
+74988460,RP_060315_05_E03,21628,Nkx2-1,NK2 homeobox 1,21869,12,coronal,n/a,0.695,77.379,43558.078,5,1955
+74581381,RP_051214_01_C06,44039,Hsbp1,heat shock factor binding protein 1,68196,8,coronal,n/a,0.692,53.266,34796.172,4,1808
+74881549,RP_060315_04_C10,11724,Atp2a2,"ATPase, Ca++ transporting, cardiac muscle, slow twitch 2",11938,5,coronal,n/a,0.692,64.471,37893.648,5,2033
+76085745,RP_060530_01_F05,74353,Fdps,farnesyl diphosphate synthetase,110196,3,coronal,n/a,0.687,39.715,23488.115,5,2033
+293468,RP_040604_02_G05,42219,LOC66376,uncharacterized LOC66376,66376,2,coronal,n/a,0.686,77.916,44550.406,5,1962
+70928270,RP_050725_02_C05,14208,Gap43,growth associated protein 43,14432,16,coronal,n/a,0.681,73.298,43771.797,5,2033
+74047915,RP_051214_02_C12,49675,Atp6v1d,"ATPase, H+ transporting, lysosomal V1 subunit D",73834,12,coronal,n/a,0.680,46.200,27604.373,5,2031
+72129296,RP_051017_03_F12,15042,Hist2h2aa1,"histone cluster 2, H2aa1",15267,3,coronal,n/a,0.677,29.375,20197.719,4,1861
+74800914,RP_060315_02_A06,16692,Phyh,phytanoyl-CoA hydroxylase,16922,2,coronal,n/a,0.676,52.156,31360.029,5,2033
+75774677,RP_060530_01_D02,82970,Arhgdia,Rho GDP dissociation inhibitor (GDI) alpha,192662,11,coronal,n/a,0.672,59.359,35895.164,5,2033
+74047841,RP_051214_02_A09,26971,Pla2g7,"phospholipase A2, group VII (platelet-activating factor acetylhydrolase, plasma)",27226,17,coronal,n/a,0.662,36.857,22644.201,5,2033
+75934526,RP_060530_01_E02,35236,Eef1b2,eukaryotic translation elongation factor 1 beta 2,55949,1,coronal,n/a,0.658,35.742,21749.900,5,2002
+74819238,RP_060315_02_C02,43003,Eef1g,eukaryotic translation elongation factor 1 gamma,67160,19,coronal,n/a,0.656,57.750,37580.250,4,1708
+75773511,RP_060530_01_A01,20157,Scg5,secretogranin V,20394,2,coronal,n/a,0.656,63.785,44970.863,4,1849
+79591705,RP_071218_02_B09,11607,App,amyloid beta (A4) precursor protein,11820,16,coronal,n/a,0.652,84.700,61653.836,4,1899
+74988738,RP_060315_04_B06,21190,Ubtf,"upstream binding transcription factor, RNA polymerase I",21429,11,coronal,n/a,0.647,35.923,26382.367,4,1901
+83158,RP_040407_01_G03,48042,Otud6b,OTU domain containing 6B,72201,4,coronal,n/a,0.644,35.802,26300.477,3,1420
+67936203,RP_041102_01_A12,86627,BC005624,cDNA sequence BC005624,227707,2,coronal,n/a,0.639,48.511,34992.262,4,1843
+61411,RP_040407_01_C07,21714,Tnnt3,"troponin T3, skeletal, fast",21957,7,coronal,n/a,0.634,33.584,24051.648,3,1362
+77371841,RP_070129_01_A04,12582,Cnp,"2',3'-cyclic nucleotide 3' phosphodiesterase",12799,11,coronal,n/a,0.632,49.528,31273.625,5,1995
+73521810,RP_051101_03_A09,19003,Tmsb10,"thymosin, beta 10",19240,6,coronal,n/a,0.631,65.641,38420.312,5,1847
+71358579,RP_050725_03_E08,17238,Cd200,CD200 antigen,17470,16,coronal,n/a,0.625,69.672,45323.617,5,2033
+227163,RP_040604_02_B03,85052,Flcn,folliculin,216805,11,coronal,n/a,0.625,60.245,56333.297,3,1753
+72081553,RP_051017_01_D06,14457,Gnao1,"guanine nucleotide binding protein, alpha O",14681,8,coronal,n/a,0.620,56.727,37202.207,5,2033
+83167,RP_040407_01_H02,44476,Tm2d3,TM2 domain containing 3,68634,7,coronal,n/a,0.608,31.992,20099.625,4,1527
+75080633,RP_060412_04_G04,12130,Capzb,"capping protein (actin filament) muscle Z-line, beta",12345,4,coronal,n/a,0.606,40.454,25191.289,5,1886
+293465,RP_040604_02_G01,43082,Rpf2,ribosome production factor 2 homolog (S. cerevisiae),67239,10,coronal,n/a,0.604,37.796,22977.361,3,1102
+74819232,RP_060315_02_B08,74767,Hdlbp,high density lipoprotein (HDL) binding protein,110611,1,coronal,n/a,0.604,29.721,23408.273,4,1902
+199390,RP_040507_02_D11,11627,Arf1,ADP-ribosylation factor 1,11840,11,coronal,n/a,0.602,46.920,39754.316,3,1531
+67936204,RP_041102_01_B02,13407,Eef2,eukaryotic translation elongation factor 2,13629,10,coronal,n/a,0.601,60.769,41048.656,5,2031
+83161,RP_040407_01_G06,19931,Rtn3,reticulon 3,20168,19,coronal,n/a,0.600,31.341,48744.605,2,1867
+79591719,RP_071218_02_B10,14575,Gria1,"glutamate receptor, ionotropic, AMPA1 (alpha 1)",14799,11,coronal,n/a,0.600,48.458,25271.719,5,1565
+71836810,RP_051017_02_B03,85032,Acsl6,acyl-CoA synthetase long-chain family member 6,216739,11,coronal,n/a,0.598,43.307,29430.855,5,2033
+71836881,RP_051017_02_E11,40898,Gprc5b,"G protein-coupled receptor, family C, group 5, member B",64297,7,coronal,n/a,0.594,38.539,26385.533,5,2033
+199398,RP_040507_03_A05,18504,Pitx1,paired-like homeodomain transcription factor 1,18740,13,coronal,n/a,0.594,34.484,26008.295,3,1343
+71924388,RP_050623_03_F01,23686,Ly6h,"lymphocyte antigen 6 complex, locus H",23934,15,coronal,n/a,0.593,37.295,25580.438,5,2033
+61413,RP_040407_01_C10,14464,Gnb1,"guanine nucleotide binding protein (G protein), beta 1",14688,4,coronal,n/a,0.591,22.863,24596.080,3,1906
+247974,RP_040604_02_D01,87503,Zscan22,zinc finger and SCAN domain containing 22,232878,7,coronal,n/a,0.589,76.029,49006.395,5,1899
+71587885,RP_050725_03_A10,13165,Dlk1,delta-like 1 homolog (Drosophila),13386,12,coronal,n/a,0.588,35.628,24620.186,5,2033
+74819689,RP_060315_02_H05,21908,Tubb2a,"tubulin, beta 2A class IIA",22151,13,coronal,n/a,0.588,84.756,58645.930,5,2033
+74882515,RP_060315_04_E10,84926,Dos,downstream of Stk11,100503659,10,coronal,n/a,0.586,62.783,43584.676,5,2033
+227161,RP_040604_02_A03,11198,Acadvl,"acyl-Coenzyme A dehydrogenase, very long chain",11370,11,coronal,n/a,0.582,89.297,62435.973,5,2033
+67752309,RP_040922_01_D07,16953,Matr3,matrin 3,17184,18,coronal,n/a,0.578,62.548,43985.180,5,2033
+75988524,RP_060620_02_D01,21617,Timp2,tissue inhibitor of metalloproteinase 2,21858,11,coronal,n/a,0.578,57.462,27836.773,5,1399
+293662,RP_040604_02_H01,108999,Slc7a6,"solute carrier family 7 (cationic amino acid transporter, y+ system), member 6",330836,8,coronal,n/a,0.576,47.944,31038.381,5,1864
+74047777,RP_051214_02_A02,13599,Epb4.1l1,erythrocyte protein band 4.1-like 1,13821,2,coronal,n/a,0.575,53.065,35604.727,5,1928
+67752306,RP_040922_01_D04,35722,Serinc1,serine incorporator 1,56442,10,coronal,n/a,0.568,63.370,51823.832,4,1858
+77371763,RP_070116_01_D05,48741,Ndufv2,NADH dehydrogenase (ubiquinone) flavoprotein 2,72900,17,coronal,n/a,0.567,55.461,38109.953,5,1949
+77413696,RP_070205_01_D08,35722,Serinc1,serine incorporator 1,56442,10,coronal,n/a,0.567,54.668,47563.973,4,1973
+74800953,RP_060315_02_A10,63308,Stard7,START domain containing 7,99138,2,coronal,n/a,0.566,41.468,29800.469,5,2033
+79556603,RP_071018_02_A11,16345,Kif5a,kinesin family member 5A,16572,10,coronal,n/a,0.564,36.447,26281.693,5,2033
+75934915,RP_060530_01_E07,12121,Capns1,"calpain, small subunit 1",12336,7,coronal,n/a,0.563,56.130,39178.684,5,1964
+79488913,RP_070129_01_A04,12582,Cnp,"2',3'-cyclic nucleotide 3' phosphodiesterase",12799,11,coronal,n/a,0.561,35.795,24429.465,5,1914
+74882217,RP_060315_04_E07,32317,Tmx4,thioredoxin-related transmembrane protein 4,52837,2,coronal,n/a,0.561,55.603,40323.531,5,2033
+73997147,RP_051214_03_F06,18250,Pam,peptidylglycine alpha-amidating monooxygenase,18484,1,coronal,n/a,0.554,54.995,40307.406,5,2032
+293471,RP_040604_02_G08,19124,Rad51,RAD51 homolog (S. cerevisiae),19361,2,coronal,n/a,0.546,33.918,29016.334,4,1870
+79556599,RP_071018_02_A06,13941,Fgf1,fibroblast growth factor 1,14164,18,coronal,n/a,0.542,36.892,27660.930,5,2033
+67752308,RP_040922_01_D06,12672,Cplx1,complexin 1,12889,5,coronal,n/a,0.539,36.577,26339.357,5,1941
+75551459,RP_060523_01_A01,14585,Grik5,"glutamate receptor, ionotropic, kainate 5 (gamma 2)",14809,7,coronal,n/a,0.536,36.555,27716.662,5,2033
+74818622,RP_060315_02_B01,86449,Ndufs2,NADH dehydrogenase (ubiquinone) Fe-S protein 2,226646,1,coronal,n/a,0.532,36.036,22924.281,5,1693
+70927826,RP_050725_01_B02,12493,Ckb,"creatine kinase, brain",12709,12,coronal,n/a,0.532,54.903,41967.125,5,2033
+72007751,RP_051017_01_A12,43240,Erp29,endoplasmic reticulum protein 29,67397,5,coronal,n/a,0.531,42.817,32803.609,5,2033
+76115742,RP_060620_02_C10,19182,Rasgrp1,RAS guanyl releasing protein 1,19419,2,coronal,n/a,0.526,50.014,35617.414,5,1874
+1631,RP_Baylor_103325,72162,Cenpf,centromere protein F,108000,1,coronal,n/a,0.526,60.482,40026.043,5,1741
+75774686,RP_060530_01_D11,85942,Nrbp2,nuclear receptor binding protein 2,223649,15,coronal,n/a,0.523,46.700,36280.395,5,2033
+293668,RP_040715_01_A02,20487,Serpinb8,"serine (or cysteine) peptidase inhibitor, clade B, member 8",20725,1,coronal,n/a,0.523,70.974,51436.523,5,1896
+74882525,RP_060315_04_E11,88045,Snx33,sorting nexin 33,235406,9,coronal,n/a,0.522,41.758,32535.090,5,2033
+76085747,RP_060530_02_G01,42998,Smarca2,"SWI/SNF related, matrix associated, actin dependent regulator of chromatin, subfamily a, member 2",67155,19,coronal,n/a,0.513,54.835,39409.188,5,1844
+70560265,RP_050324_01_H12,107408,Heatr5b,HEAT repeat containing 5B,320473,17,coronal,n/a,0.512,80.162,57961.793,5,1852
+79556654,RP_071204_01_A10,31598,Pvr,poliovirus receptor,52118,7,coronal,n/a,0.506,45.235,37743.195,4,1688
+71836805,RP_051017_02_A10,42801,Tmx2,thioredoxin-related transmembrane protein 2,66958,2,coronal,n/a,0.503,56.526,44695.531,5,1989
+77280559,RP_070116_01_F10,150237,E330014M11Rik*,RIKEN cDNA E330014M11 gene (non-RefSeq),0,n/a,coronal,n/a,0.486,37.472,28892.018,5,1874
+70805906,RP_050725_02_E03,44427,Rtn4,reticulon 4,68585,11,coronal,n/a,0.486,40.953,34296.273,5,2033
+75077203,RP_060412_02_E06,13262,Dpp6,dipeptidylpeptidase 6,13483,5,coronal,n/a,0.481,58.554,49472.336,5,2033
+356858,RP_040617_01_H08,35492,Gde1,glycerophosphodiester phosphodiesterase 1,56209,7,coronal,n/a,0.481,44.775,37868.879,5,2033
+67810540,RP_040922_01_F09,17030,Mef2d,myocyte enhancer factor 2D,17261,3,coronal,n/a,0.479,36.703,31150.002,5,2033
+72080123,RP_051017_03_C06,37273,Nap1l5,nucleosome assembly protein 1-like 5,58243,6,coronal,n/a,0.471,54.712,54890.004,4,1890
+654925,RP_040922_01_A11,36709,Gabarapl1,gamma-aminobutyric acid (GABA) A receptor-associated protein-like 1,57436,6,coronal,n/a,0.465,20.225,32302.494,2,1486
+655307,RP_040922_01_B05,26184,Psg16,pregnancy specific glycoprotein 16,26436,7,coronal,n/a,0.448,41.604,36132.039,5,1947
+293682,RP_040604_02_H09,76995,Atp6v0b,"ATPase, H+ transporting, lysosomal V0 subunit B",114143,4,coronal,n/a,0.424,56.174,53591.008,5,2022
+1088,RP_Baylor_253988,21980,Uchl1,ubiquitin carboxy-terminal hydrolase L1,22223,5,coronal,n/a,0.417,36.214,35261.840,5,2031
+75080269,RP_060412_06_H09,149967,9530085C10Rik*,RIKEN cDNA 9530085C10 gene (non-RefSeq),0,n/a,coronal,n/a,0.413,42.107,50066.004,4,1963
+74958606,RP_060315_05_B08,53387,8030498B09Rik,RIKEN cDNA 8030498B09 gene,77547,9,coronal,n/a,0.409,73.224,72811.211,5,2033
+74819230,RP_060315_02_B06,43795,Tomm20,translocase of outer mitochondrial membrane 20 homolog (yeast),67952,8,coronal,n/a,0.408,37.891,37791.805,5,2033
+75551462,RP_060523_01_A05,14576,Gria2,"glutamate receptor, ionotropic, AMPA2 (alpha 2)",14800,3,coronal,n/a,0.407,46.770,46739.809,5,2033
+67936208,RP_040928_01_A08,37652,Pcbp4,poly(rC) binding protein 4,59092,9,coronal,n/a,0.405,35.292,32551.348,5,1868
+356090,RP_040617_02_C06,14163,Gaa,"glucosidase, alpha, acid",14387,11,coronal,n/a,0.394,72.228,74524.594,5,2033
+70743888,RP_050725_01_H12,43141,Gprasp1,G protein-coupled receptor associated sorting protein 1,67298,X,coronal,n/a,0.371,57.194,62692.770,5,2033
+544899,RP_040617_02_H01,33431,Atxn10,ataxin 10,54138,15,coronal,n/a,0.351,35.310,40957.875,5,2033
+70616006,RP_050725_01_D09,18848,Prkar1b,"protein kinase, cAMP dependent regulatory, type I beta",19085,5,coronal,n/a,0.345,47.788,56337.914,5,2033
+67870466,RP_041018_01_D08,18408,Pfkm,"phosphofructokinase, muscle",18642,15,coronal,n/a,0.303,35.190,47278.535,5,2033
