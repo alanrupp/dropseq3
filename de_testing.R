@@ -81,17 +81,67 @@ find_classes <- function(object, markers_df) {
 }
 
 # - Find all conserved markers -----------------------------------------------
-FindAllConservedMarkers <- function(object, clusters = NULL, groupby = NULL) {
+FindAllConservedMarkers <- function(object, groupby = NULL, clusters = NULL,
+                                    verbose = FALSE) {
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   }
   
-  markers <- map(clusters, ~ FindConservedMarkers(object, .x, 
-                                                  grouping.var = groupby))
+  # Run FindConservedMarkers on each cluster
+  markers <- map(clusters, 
+                 ~ FindConservedMarkers(object, .x,
+                                        grouping.var = groupby,
+                                        only.pos = TRUE,
+                                        verbose = verbose
+                                        ))
   markers <- map(markers, as.data.frame)
   markers <- map(markers, ~ rownames_to_column(.x, "gene"))
   markers <- map(clusters,
                  ~ mutate(markers[[which(clusters == .x)]], "cluster" = .x))
   markers <- bind_rows(markers)
+  
+  # run logitp function from metap package
+  logitp <- function(markers) {
+    # select only p values from data.frame
+    p_df <- select(markers, ends_with("p_val_adj"))
+    
+    # Calcaulte C value
+    calc_C <- function(p_df) {
+      k <- ncol(p_df)
+      C <- sqrt((k*pi^2*(5*k + 2))/(3*(5*k+4)))
+      return(C)
+    }
+    C <- calc_C(p_df)
+    
+    # convert each P value to log space
+    convert_p <- function(p) {
+      log(p / (1-p))
+    }
+    p_df <- apply(p_df, c(1,2), convert_p)
+    
+    # Calculate t value for each gene
+    calc_t <- function(p_df) {
+      apply(p_df, 1, function(x) -sum(x)/C)
+    }
+    p_val <- 2 * pt(calc_t(p_df), ncol(p_df)-1, lower.tail = FALSE)
+    return(p_val)
+  }
+  p_val <- logitp(markers)
+  
+  # calculate pct cells expressing gene and fold change
+  pct1 <- rowMeans(select(markers, ends_with("pct.1")))
+  pct2 <- rowMeans(select(markers, ends_with("pct.2")))
+  fc <- rowMeans(select(markers, ends_with("avg_logFC")))
+  
+  # select only relevant columns
+  markers < select(markers, cluster, gene) %>%
+    mutate("pct.1" = pct1,
+           "pct.2" = pct2,
+           "avg_logFC" = fc,
+           "p_val_adj" = p_val)
+  markers <- filter(markers, p_val_adj < 0.05)
+  markers <- markers %>%
+    group_by(cluster) %>%
+    arrange(desc(pct.1 - pct.2))
   return(markers)
 }
