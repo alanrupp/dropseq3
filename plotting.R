@@ -129,7 +129,7 @@ heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
   if (scale == TRUE) {
     matrix <- object@assays$RNA@scale.data[genes, cells]
     # make red --> white --> blue color palette
-    endcolors <- c("firebrick3", "white", "dodgerblue3")
+    endcolors <- c("red4", "white", "royalblue4")
     color_pal <- c(colorRampPalette(c(endcolors[1], endcolors[2]))(50), 
                    colorRampPalette(c(endcolors[2], endcolors[3]))(51)[-1])
   } else {
@@ -287,7 +287,7 @@ heatmap_block <- function(object,
   plt <- 
     ggplot(df, aes(x = cell, y = fct_rev(gene))) +
     geom_tile(aes(fill = z), color = NA, show.legend = legend) +
-    scale_fill_gradient2(low = "firebrick3", mid = "white", high = "dodgerblue3",
+    scale_fill_gradient2(low = "red4", mid = "white", high = "royalblue4",
                          name = "Expression") +
     xlab(NULL) + ylab(NULL) +
     theme_bw() +
@@ -372,7 +372,7 @@ violin_plot <- function(object, genes, tx = NULL, clusters = NULL,
   
   # generic plot attributes
   plt <- plt + 
-    geom_violin(show.legend = FALSE, scale = "width") +
+    geom_violin(show.legend = FALSE, scale = "width", adjust = 1) +
     theme_bw() +
     scale_y_continuous(expand = c(0,0)) +
     theme(panel.grid = element_blank())
@@ -400,6 +400,41 @@ violin_plot <- function(object, genes, tx = NULL, clusters = NULL,
   }
   
   return(plt)
+}
+
+
+# - Stacked violin plot -----------------------------------------------------
+stacked_violin <- function(object, genes, cluster_order = NULL) {
+  # grab cluster order
+  if (is.null(cluster_order)) {
+    clusters <- sort(unique(object@active.ident))
+  } else {
+    clusters <- factor(
+      unique(object@active.ident[object@active.ident %in% cluster_order]),
+      levels = cluster_order)
+  }
+  
+  # make plots
+  plt_list <- map(genes, 
+                  ~ violin_plot(object, genes = .x, 
+                                jitter = FALSE, void = TRUE) +
+                    theme(axis.title = element_text("angle" = 90, 
+                                                    color = "black"), 
+                          axis.title.x = element_blank()) + 
+                    ylab(.x)
+                  )
+  
+  # redo las plot to add axis text
+  plt_list[[length(plt_list)]] <-
+    violin_plot(object, genes = genes[length(genes)], 
+                jitter = FALSE, void = TRUE) +
+    theme(axis.title = element_text("angle" = 90, color = "black"),
+          axis.title.x = element_blank(),
+          axis.text.x = element_text(color = "black")) + 
+    ylab(genes[length(genes)])
+  
+  # combine into one plot_grid
+  cowplot::plot_grid(plotlist = plt_list, ncol = 1)
 }
 
 
