@@ -134,7 +134,7 @@ FindAllConservedMarkers <- function(object, groupby = NULL, clusters = NULL,
   fc <- rowMeans(select(markers, ends_with("avg_logFC")))
   
   # select only relevant columns
-  markers < select(markers, cluster, gene) %>%
+  markers <- select(markers, cluster, gene) %>%
     mutate("pct.1" = pct1,
            "pct.2" = pct2,
            "avg_logFC" = fc,
@@ -144,4 +144,9 @@ FindAllConservedMarkers <- function(object, groupby = NULL, clusters = NULL,
     group_by(cluster) %>%
     arrange(desc(pct.1 - pct.2))
   return(markers)
+}
+
+# - Find unique genes -------------------------------------------------------
+find_unique_genes <- function(object, from_markers = FALSE) {
+  
 }
