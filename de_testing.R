@@ -147,6 +147,35 @@ FindAllConservedMarkers <- function(object, groupby = NULL, clusters = NULL,
 }
 
 # - Find unique genes -------------------------------------------------------
-find_unique_genes <- function(object, from_markers = FALSE) {
+find_unique_genes <- function(object, genes = NULL, clusters = NULL) {
+  if (is.null(clusters)) {
+    clusters <- sort(unique(object@active.ident))
+  }
+  # grab cells from cluster and other clusters
+  grab_cells <- function(cluster) {
+    names(object@active.ident)[object@active.ident == cluster]
+  }
+  # set up data.frame
+  df <- expand.grid(genes, clusters)
+  df <- mutate(df, "gene" = Var1, "cluster" = Var2)
+  # calculate pct expressing for each gene and cluster
+  pct_expressing <- function(gene, cluster) {
+    sum(object@assays$RNA@counts[gene, grab_cells(cluster)] > 0) /
+      length(grab_cells(cluster))
+  }
+  df$pct <- apply(df, 1, function(x) pct_expressing(x[1], x[2]))
   
+  # find largest difference
+  by_gene <- df %>%
+    group_by(gene) %>%
+    summarize("first" = max(pct), "second" = nth(pct, 2)) %>%
+    mutate("diff" = first - second) %>%
+    arrange(desc(diff))
+  
+  by_cluster <- df %>%
+    group_by(gene) %>%
+    filter(pct == max(pct)) %>%
+    select(-pct)
+  
+  return(left_join(by_gene, by_cluster, by = "gene"))
 }
