@@ -414,27 +414,59 @@ stacked_violin <- function(object, genes, cluster_order = NULL) {
       levels = cluster_order)
   }
   
-  # make plots
-  plt_list <- map(genes, 
+  # make plots for all but last one
+  data_plots <- map(genes, 
                   ~ violin_plot(object, genes = .x, 
-                                jitter = FALSE, void = TRUE) +
-                    theme(axis.title = element_text("angle" = 90, 
-                                                    color = "black"), 
-                          axis.title.x = element_blank()) + 
-                    ylab(.x)
+                                jitter = FALSE, void = TRUE) #+
+                    #theme(#axis.title = element_text(color = "black"), 
+                    #      axis.title.x = element_blank()) + 
+                    #ylab(.x)
                   )
   
-  # redo las plot to add axis text
-  plt_list[[length(plt_list)]] <-
-    violin_plot(object, genes = genes[length(genes)], 
-                jitter = FALSE, void = TRUE) +
-    theme(axis.title = element_text("angle" = 90, color = "black"),
-          axis.title.x = element_blank(),
-          axis.text.x = element_text(color = "black")) + 
-    ylab(genes[length(genes)])
+  # make plots for all gene names for left-hand side
+  gene_plots <- 
+    map(genes, ~ ggplot(data.frame("gene" = .x),
+           aes(x = 0, y = 0, label = gene)) +
+          geom_text(hjust = "inward", color = "black") +
+          theme_void()
+    )
+  
+  # combine into one list
+  plots <- list()
+  for (i in seq(length(genes))) {
+    plots <- c(plots, gene_plots[i])
+    plots <- c(plots, data_plots[i])
+  }
+  
+  # make empty square for bottom
+  void_plot <- 
+    ggplot(data.frame("a" = ""), aes(x = 0, y = 0, label = a)) +
+    geom_text() + 
+    theme_void()
+  plots[[length(plots)+1]] <- void_plot
+  
+  # make x axis label plot
+  cluster_plot <- 
+    ggplot(
+      data.frame("cluster" = sort(unique(object@active.ident)),
+                 "position" = seq(length(unique(object@active.ident)))),
+      aes(x = position, y = 1, label = cluster)) +
+    geom_text(hjust = 0.5) +
+    theme_void() +
+    scale_x_continuous(expand = c(0, 0), 
+                       limits = c(0.5, 
+                                  length(unique(object@active.ident)) + 0.5)) +
+    scale_y_continuous(expand = c(0, 0)) +
+    xlab(NULL) + ylab(NULL)
+  plots[[length(plots)+1]] <- cluster_plot
   
   # combine into one plot_grid
-  cowplot::plot_grid(plotlist = plt_list, ncol = 1)
+  cowplot::plot_grid(plotlist = plots, 
+                     ncol = 2, 
+                     rel_heights = c(rep(0.95/length(genes),
+                                         length(genes)), 0.05),
+                     rel_widths = c(0.1, 0.9),
+                     align = "h")
 }
 
 
