@@ -147,7 +147,8 @@ FindAllConservedMarkers <- function(object, groupby = NULL, clusters = NULL,
 }
 
 # - Find unique genes -------------------------------------------------------
-find_unique_genes <- function(object, genes = NULL, clusters = NULL) {
+find_unique_genes <- function(object, genes = NULL, clusters = NULL,
+                              top_n = 1) {
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   }
@@ -157,7 +158,7 @@ find_unique_genes <- function(object, genes = NULL, clusters = NULL) {
   }
   # set up data.frame
   df <- expand.grid(genes, clusters)
-  df <- mutate(df, "gene" = Var1, "cluster" = Var2)
+  df <- rename(df, "gene" = Var1, "cluster" = Var2)
   # calculate pct expressing for each gene and cluster
   pct_expressing <- function(gene, cluster) {
     sum(object@assays$RNA@counts[gene, grab_cells(cluster)] > 0) /
@@ -167,15 +168,47 @@ find_unique_genes <- function(object, genes = NULL, clusters = NULL) {
   
   # find largest difference
   by_gene <- df %>%
+    ungroup() %>%
+    arrange(desc(pct)) %>%
     group_by(gene) %>%
     summarize("first" = max(pct), "second" = nth(pct, 2)) %>%
     mutate("diff" = first - second) %>%
     arrange(desc(diff))
-  
   by_cluster <- df %>%
     group_by(gene) %>%
     filter(pct == max(pct)) %>%
     select(-pct)
   
-  return(left_join(by_gene, by_cluster, by = "gene"))
+  # return top n gene(s) for each cluster
+  result <- inner_join(by_gene, by_cluster, by = "gene")
+  result <- result %>%
+    group_by(cluster) %>% 
+    slice(top_n) %>%
+    ungroup() %>%
+    arrange(cluster)
+  
+  return(result)
+}
+
+# - Eigengene ---------------------------------------------------------------
+eigengene <- function(object, genes) {
+  genes <- genes[genes %in% rownames(object@assays$RNA@scale.data)]
+  pca <- prcomp(t(object@assays$RNA@scale.data[genes, ]))
+  return(pca$x[,1])
+}
+
+
+# - Merging clusters --------------------------------------------------------
+# merge clusters according to the Tasic et al Nature 2018 criteria 
+merge_clusters <- function(object, genes) {
+  
+}
+
+
+# - Finding doublets ---------------------------------------------------------
+# Finding doublets based on the Tasic et al. Nature 2018 criteria
+find_doublets <- function(object, markers) {
+  # find eigengene for each cell for each set of cluster markers
+  eigengene <-
+    map(uniq)
 }
