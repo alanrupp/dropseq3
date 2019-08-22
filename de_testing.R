@@ -81,7 +81,8 @@ find_classes <- function(object, markers_df) {
 }
 
 # - Find all conserved markers -----------------------------------------------
-FindAllConservedMarkers <- function(object, groupby = NULL, clusters = NULL,
+FindAllConservedMarkers <- function(object, ident2 = NULL, 
+                                    groupby = NULL, clusters = NULL,
                                     verbose = FALSE) {
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
@@ -89,7 +90,7 @@ FindAllConservedMarkers <- function(object, groupby = NULL, clusters = NULL,
   
   # Run FindConservedMarkers on each cluster
   markers <- map(clusters, 
-                 ~ FindConservedMarkers(object, .x,
+                 ~ FindConservedMarkers(object, .x, ident.2 = ident2,
                                         grouping.var = groupby,
                                         only.pos = TRUE,
                                         verbose = verbose
@@ -200,8 +201,55 @@ eigengene <- function(object, genes) {
 
 # - Merging clusters --------------------------------------------------------
 # merge clusters according to the Tasic et al Nature 2018 criteria 
-merge_clusters <- function(object, genes) {
+merge_clusters <- function(object) {
+  # find 2 neighbors for each cluster based on Euclidean distance in UMAP
+  cluster_centers <- 
+    data.frame("UMAP1" = object@reductions$umap@cell.embeddings[,1],
+               "UMAP2" = object@reductions$umap@cell.embeddings[,2],
+               "cluster" = object@active.ident) %>%
+    group_by(cluster) %>%
+    summarize(UMAP1 = median(UMAP1), UMAP2 = median(UMAP2)) %>%
+    as.data.frame() %>%
+    column_to_rownames("cluster")
+  dists <- 
+    dist(cluster_centers) %>%
+    as.matrix() %>%
+    as.data.frame() %>%
+    rownames_to_column("cluster") %>%
+    gather(-cluster, key = "other", value = "dist")
+  dists <- filter(dists, dist != 0)
+  find_neighbors <- function(clstr) {
+    dists <- filter(dists, cluster == clstr)
+    dists <- arrange(dists, dist)
+    dists <- slice(dists, 1:2)
+    return(dists$other)
+  }
+  neighbors <- map(unique(dists$cluster), find_neighbors)
+  neighbors <- unlist(neighbors)
+  neighbors <- data.frame("cluster" = rep(unique(dists$cluster), each = 2),
+                          "neighbor" = neighbors)
   
+  # calculate "deScore"
+  deScore <- function(ident1, ident2) {
+    result <- FindMarkers(object, ident.1 = ident1, ident.2 = ident2)
+    result <- mutate(result, p_val_adj = -log10(p_val_adj))
+    result <- mutate(result, ifelse(p_val_adj > 20, 20, p_val_adj))
+    result <- sum(result$p_val_adj)
+    return(result)
+  }
+  neighbors$deScore <- apply(neighbors, 1, function(x) deScore(x[1], x[2]))
+  to_merge <- filter(neighbors, deScore < 150)
+  if (length(to_merge == 0)) {
+    cat("No clusters to merge")
+  } else {
+    for (i in nrow(to_merge)) {
+      cat(paste("Merging clusters", to_merge[i, "cluster"], "and",
+                to_merge[i, "neighbor"]))
+      object@active.ident[object@active.ident == to_merge[i, "neighbor"]] <
+        to_merge[i, "cluster"]
+    }
+  }
+  return(object)
 }
 
 
@@ -209,6 +257,12 @@ merge_clusters <- function(object, genes) {
 # Finding doublets based on the Tasic et al. Nature 2018 criteria
 find_doublets <- function(object, markers) {
   # find eigengene for each cell for each set of cluster markers
-  eigengene <-
-    map(uniq)
+  eigengenes <-
+    map(unique(object@active.ident),
+        ~ eigengene(object, filter(markers, cluster == .x)$gene))
+  eigengenes <- map(eigengenes, scale)
+  members <- map(eigengenes, ~ .x[.x > 3, ])
+  members <- unlist(members)
+  doublets <- names(members)[duplicated(members)]
+  return(doublets)
 }
