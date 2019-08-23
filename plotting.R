@@ -688,3 +688,6 @@ flamemap <- function(object, genes, cells = NULL, n_bars = 100,
   
   return(plt)
 }
+
+
+# - Eigengene plot ----------------------------------------------------------
