@@ -1,5 +1,6 @@
 library(Seurat)
 library(tidyverse)
+library(ggrepel)
 
 # - Summarize data ------------------------------------------------------------
 summarize_data <- function(object, genes, clusters = NULL) {
@@ -203,7 +204,6 @@ heatmap_block <- function(object,
                           scale = TRUE,
                           label_genes = TRUE, 
                           maxmin = NULL,
-                          legend = TRUE,
                           integrated = FALSE) {
   
   # 
@@ -269,44 +269,43 @@ heatmap_block <- function(object,
     mutate(cell = factor(cell, levels = cells),
            gene = factor(gene, levels = genes))
   
-  
   # generate axis labels to illustrate clusters
-  label_df <- data.frame("cell" = cells) %>%
+  label_text <- data.frame("cell" = cells) %>%
     left_join(., data.frame("cell" = names(object@active.ident),
-                            "cluster" = object@active.ident), by = "cell") %>%
-    mutate("pos" = seq(length(cells)))
-  label_bar <- label_df %>%
-    group_by(cluster) %>%
-    summarize(xmin = min(pos), xmax = max(pos))
-  label_text <- label_df %>%
+                            "cluster" = object@active.ident), 
+              by = "cell") %>%
+    mutate("pos" = seq(length(cells))) %>%
     group_by(cluster) %>%
     summarize(pos = median(pos))
-  label_colors <- sample(grDevices::colors(), length(unique(label_bar$cluster)))
   
+  # - plots -----------
+  plt_list <- list()
   # basic plot
-  plt <- 
+  heatmap_plt <- 
     ggplot(df, aes(x = cell, y = fct_rev(gene))) +
     geom_tile(aes(fill = z), color = NA, show.legend = legend) +
     scale_fill_gradient2(low = "red4", mid = "white", high = "royalblue4",
                          name = "Expression") +
-    xlab(NULL) + ylab(NULL) +
-    theme_bw() +
-    theme(panel.grid = element_blank(),
-          axis.text = element_blank(),
-          axis.ticks = element_blank(),
-          panel.border = element_blank())
+    theme_void() +
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_discrete(expand = c(0, 0)) +
+    xlab(NULL) + ylab(NULL)
+  plt_list[[1]] <- heatmap_plt
   
-  # add axis legend to plot
-  #plt <- plt + 
-  #  geom_rect(data = label_bar, 
-  #             aes(xmin = xmin, xmax = xmax, ymin = -2, ymax = 0, fill = cluster),
-  #             inherit.aes = FALSE, show.legend = FALSE) +
-  #  geom_text(data = label_text,
-  #            aes(x = pos, y = -10, color = cluster, label = cluster),
-  #            inherit.aes = FALSE, show.legend = FALSE) +
-  #  scale_color_manual(values = label_colors)
+  # plot axis labels
+  label_plt <- 
+    ggplot(label_text, aes(x = pos, y = 0)) +
+    geom_text_repel(aes(label = cluster), ylim = c(-Inf, 0),
+                    direction = "y") +
+    theme_void() +
+    scale_x_continuous(expand = c(0, 0), limits = c(1, max(label_text$pos))) +
+    scale_y_continuous(expand = c(0, 0), limits = c(-100, 1)) +
+    xlab(NULL) + ylab(NULL)
+  plt_list[[2]] <- label_plt
   
-  return(plt)
+  return(cowplot::plot_grid(plotlist = plt_list, ncol = 1,
+                            rel_heights = c(0.8, 0.2))
+  )
 }
 
 
@@ -535,6 +534,7 @@ umap_plot <- function(object, genes = NULL, cells = NULL, clusters = NULL,
 
 # - Doublet UMAP plot -------------------------------------------------------
 doublet_umap_plot <- function(object, doublets) {
+  # grab data
   df <- data.frame(
     "UMAP1" = object@reductions$umap@cell.embeddings[,1],
     "UMAP2" = object@reductions$umap@cell.embeddings[,2],
@@ -547,6 +547,7 @@ doublet_umap_plot <- function(object, doublets) {
   # add legend
   legend_pos <- c(min(df$UMAP1), max(df$UMAP2))
   
+  # generate plot
   plt <- ggplot(df, aes(x = UMAP1, y = UMAP2, color = Doublet)) +
     geom_point(show.legend = FALSE, stroke = 0) +
     scale_color_manual(values = c("gray90", "firebrick3")) +
