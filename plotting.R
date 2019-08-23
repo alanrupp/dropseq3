@@ -535,19 +535,26 @@ umap_plot <- function(object, genes = NULL, cells = NULL, clusters = NULL,
 
 # - Doublet UMAP plot -------------------------------------------------------
 doublet_umap_plot <- function(object, doublets) {
-  data.frame(
+  df <- data.frame(
     "UMAP1" = object@reductions$umap@cell.embeddings[,1],
     "UMAP2" = object@reductions$umap@cell.embeddings[,2],
     "cell" = names(object@active.ident)
   ) %>%
     mutate("Doublet" = ifelse(cell %in% doublets, TRUE, FALSE)) %>%
     arrange(Doublet) %>%
-    mutate(cell = factor(cell, levels = cell)) %>%
-    ggplot(aes(x = UMAP1, y = UMAP2, color = Doublet)) +
+    mutate(cell = factor(cell, levels = cell))
+  
+  # add legend
+  legend_pos <- c(min(df$UMAP1), max(df$UMAP2))
+  
+  plt <- ggplot(df, aes(x = UMAP1, y = UMAP2, color = Doublet)) +
     geom_point(show.legend = FALSE, stroke = 0) +
     scale_color_manual(values = c("gray90", "firebrick3")) +
+    annotate("text", x = legend_pos[1], y = legend_pos[2], 
+             label = "Doublets", color = "firebrick3", hjust = 0) +
     theme_bw() +
     theme(panel.grid = element_blank())
+  return(plt)
 }
 
 
