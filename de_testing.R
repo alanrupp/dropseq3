@@ -233,19 +233,21 @@ merge_clusters <- function(object) {
   deScore <- function(ident1, ident2) {
     result <- FindMarkers(object, ident.1 = ident1, ident.2 = ident2)
     result <- mutate(result, p_val_adj = -log10(p_val_adj))
-    result <- mutate(result, ifelse(p_val_adj > 20, 20, p_val_adj))
+    result <- mutate(result, p_val_adj = ifelse(p_val_adj > 20, 20, p_val_adj))
     result <- sum(result$p_val_adj)
     return(result)
   }
   neighbors$deScore <- apply(neighbors, 1, function(x) deScore(x[1], x[2]))
+  
+  # merge clusters with deScore < 150
   to_merge <- filter(neighbors, deScore < 150)
-  if (length(to_merge == 0)) {
+  if (nrow(to_merge) == 0) {
     cat("No clusters to merge")
   } else {
-    for (i in nrow(to_merge)) {
+    for (i in 1:nrow(to_merge)) {
       cat(paste("Merging clusters", to_merge[i, "cluster"], "and",
                 to_merge[i, "neighbor"]))
-      object@active.ident[object@active.ident == to_merge[i, "neighbor"]] <
+      object@active.ident[object@active.ident == to_merge[i, "neighbor"]] <-
         to_merge[i, "cluster"]
     }
   }
@@ -265,4 +267,44 @@ find_doublets <- function(object, markers) {
   members <- unlist(members)
   doublets <- names(members)[duplicated(members)]
   return(doublets)
+}
+
+# - Removing clusters of mostly doublets ------------------------------------
+find_doublet_clusters <- function(object, doublets) {
+  # find expected doublet rate based on cells per sample
+  doublet_rates <- read_csv("~/Programs/dropseq3/data/10x_doublet_rate.csv")
+  model <- lm(rate ~ cells, data = doublet_rates)
+  expected_doublets <- predict(model,
+    data.frame("cells" = ncol(object@assays$RNA@data)/
+                 length(unique(object$mouse))))
+  
+  # find actual doublet rates
+  cluster_rates <- table(object@active.ident, 
+                         names(object@active.ident) %in% doublets
+                         )
+  above_threshold <- as.data.frame(cluster_rates) %>%
+    group_by(Var1) %>%
+    summarize("Rate" = Freq[Var2 == TRUE]/sum(Freq)) %>%
+    filter(Rate > expected_doublets)
+  
+  # if clusters have rates above expected, run a statistical test
+  if (nrow(above_threshold) == 0) {
+    cat("No clusters have more doublets than expected")
+    return(NULL)
+  } else {
+    cluster_rates <- as.matrix(cluster_rates)
+    cluster_rates <- cluster_rates[above_threshold$Var1, ]
+    result <- map(cluster_rates, 
+                  ~ prop.test(.x, p = expected_doublets)$p.value)
+    result <- unlist(result)
+    names(result) <- rownames(cluster_rates)
+    result <- result[result < 0.05]
+    if (length(result > 0)) {
+      cat(paste(length(result), "clusters have higher frequency of doublets than expected"))
+      return(names(result))
+    } else {
+      cat("No clusters have a significantly elevated frequency of doublets")
+      return(NULL)
+    }
+  }
 }
