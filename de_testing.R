@@ -147,6 +147,119 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
   return(markers)
 }
 
+
+# - Summarize markers -------------------------------------------------------
+summarize_markers <- function(markers) {
+  df <- markers %>%
+    group_by(cluster) %>%
+    summarize(total = sum(p_val_adj < 0.05)) %>%
+    complete(cluster) %>%
+    mutate(total = ifelse(is.na(total), 0, total))
+  return(df)
+}
+
+
+# - Merge markerless --------------------------------------------------------
+# merge markerless clusters with nearest neighbor by both correlation and UMAP
+merge_markerless <- function(object, marker_summary) {
+  markerless <- filter(marker_summary, total == 0)$cluster
+  if (length(markerless) == 1) {
+    cat(paste("Cluster", markerless, 
+              "has no significantly enriched genes. Merging with neighbors or dropping. ")
+    )
+  } else if (length(markerless) > 1) {
+    cat(paste("Clusters", paste(markerless, collpase = ", "), 
+              "have no significantly enriched genes. Merging with neighbors or dropping. ")
+    )
+  } else {
+    return(object)
+  }
+  genes <- unique(markers$gene)
+  genes <- genes[genes %in% rownames(srt@assays$RNA@scale.data)]
+
+  # find correlation between clusters and markerless
+  grab_cells <- function(cluster) {
+    names(object@active.ident)[object@active.ident == cluster]
+  }
+  correlation <- function(cluster) {
+    corr <- 
+      map(unique(object@active.ident),
+          ~ cor(Matrix::rowMeans(object@assays$RNA@scale.data[genes, grab_cells(.x)]),
+                Matrix::rowMeans(object@assays$RNA@scale.data[genes, grab_cells(cluster)]))
+    ) %>% unlist()
+    names(corr) <- unique(object@active.ident)
+    # remove self-correlation
+    corr <- corr[corr != 1]
+    # only keep correlations greater than the median
+    neighbor <- names(corr)[corr == max(corr)]
+    neighbor <- as.integer(neighbor)
+    return(neighbor)
+  }
+  
+  # find umap neighbor
+  umap_neighbor <- function(clstr) {
+    cluster_centers <- data.frame(
+      "cluster" = object@active.ident,
+      "UMAP1" = object@reductions$umap@cell.embeddings[,1],
+      "UMAP2" = object@reductions$umap@cell.embeddings[,2]
+    ) %>%
+      group_by(cluster) %>%
+      summarize(UMAP1 = median(UMAP1), UMAP2 = median(UMAP2)) %>%
+      as.data.frame() %>%
+      column_to_rownames("cluster")
+    dists <- 
+      dist(cluster_centers) %>%
+      as.matrix() %>%
+      as.data.frame() %>%
+      rownames_to_column("cluster") %>%
+      gather(-cluster, key = "other", value = "dist")
+    dists <- filter(dists, dist != 0)
+    min_dist <- dists %>%
+      group_by(cluster) %>%
+      summarize(closest = min(dist))
+    neighbor <- filter(dists, cluster == clstr & 
+                         dist == filter(min_dist, cluster == clstr)$closest)
+    if (neighbor$dist < median(min_dist$closest)) {
+      return(neighbor$other)
+      print(paste("umap", class(neighbor$other)))
+    } else {
+      return(NULL)
+    }
+  }
+  
+  # find neighbors for all markerless clusters
+  corr <- vector()
+  umap <- vector()
+  for (i in seq(length(markerless))) {
+    corr[i] <- correlation(markerless[i])
+    umap[i] <- umap_neighbor(markerless[i])
+  }
+  result <- data.frame("corr" = corr, "umap" = umap)
+  rownames(result) <- markerless
+  
+  # merge or drop cells based on neighbors
+  merge_cells <- function(cluster, other) {
+    cat(paste("Cluster", cluster, "and cluster", other,
+              "are most similar by expression correlation and UMAP distance.",
+              "Merging cluster", cluster, "into cluster", other))
+    object@active.ident[object@active.ident == cluster] <- other
+  }
+  drop_cells <- function(cluster) {
+    cat(paste("Dropping cluster", cluster, "because it has no clear larger",
+              "cluster to merge into."))
+    object <- SubsetData(object, ident.remove = cluster)
+  }
+  for (i in seq(nrow(result))) {
+    # if both umap and corr are the same, merge clusters
+    if (all(result[i, ] == result[i,1])) {
+      merge_cells(rownames(result[i,]), result[i,1])
+    } else {
+      drop_cells(rownames(result[i,]))
+    }
+  }
+  return(object)
+}
+
 # - Find unique genes -------------------------------------------------------
 find_unique_genes <- function(object, genes = NULL, clusters = NULL,
                               top_n = 1) {
