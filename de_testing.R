@@ -386,6 +386,9 @@ find_doublets <- function(object, markers) {
 
 # - Removing clusters of mostly doublets ------------------------------------
 find_doublet_clusters <- function(object, doublets) {
+  if (length(doublets) == 0) {
+    return(NULL)
+  }
   # find expected doublet rate based on cells per sample
   doublet_rates <- read_csv("~/Programs/dropseq3/data/10x_doublet_rate.csv")
   model <- lm(rate ~ cells, data = doublet_rates)
