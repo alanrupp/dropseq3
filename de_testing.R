@@ -243,18 +243,20 @@ merge_markerless <- function(object, marker_summary) {
               "are most similar by expression correlation and UMAP distance.",
               "Merging cluster", cluster, "into cluster", other))
     object@active.ident[object@active.ident == cluster] <- other
+    return(object)
   }
   drop_cells <- function(cluster) {
     cat(paste("Dropping cluster", cluster, "because it has no clear larger",
               "cluster to merge into."))
     object <- SubsetData(object, ident.remove = cluster)
+    return(object)
   }
   for (i in seq(nrow(result))) {
     # if both umap and corr are the same, merge clusters
     if (all(result[i, ] == result[i,1])) {
-      merge_cells(rownames(result[i,]), result[i,1])
+      object <- merge_cells(rownames(result[i,]), result[i,1])
     } else {
-      drop_cells(rownames(result[i,]))
+      object <- drop_cells(rownames(result[i,]))
     }
   }
   return(object)
