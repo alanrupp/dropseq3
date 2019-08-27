@@ -1,0 +1,13 @@
+Package: dropseq3
+Title: Analyze and plot single-cell RNA-seq data using Seurat 3
+Version: 0.1
+Authors@R: person("Alan", "Rupp", email = "ruppa@umich.edu",
+                  role = c("aut", "cre"))
+Description: New functions built on top of Seurat 3 framework for analyzing and plotting single-cell RNA-seq data.
+Depends: R (>= 3.1.0)
+Imports:
+    Seurat,
+    tidyverse,
+    ggrepel
+License: MIT
+LazyData: true
