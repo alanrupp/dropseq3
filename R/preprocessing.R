@@ -98,7 +98,10 @@ find_variable_genes <- function(object) {
   model <- loess(disp ~ avg, data = df)
 }
 
-# - Remove doublets ----------------------------------------------------------
-remove_doublets <- function(object, markers) {
-  
+# - Remove doublets using Scrublet ---------------------------------------------
+scrublet <- function(mtx) {
+  source_python("/home/alanrupp/Programs/dropseq3/python/scrublet.py")
+  expected_doublet_rate <- find_expected_doublet_rate(mtx)
+  doublets <- score_doublets(mtx, expected_doublet_rate)
+  return(doublets)
 }
