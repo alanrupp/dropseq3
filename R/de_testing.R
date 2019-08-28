@@ -177,18 +177,14 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
 
 # - Summarize markers -------------------------------------------------------
 summarize_markers <- function(markers) {
+  df <- markers %>%
+    group_by(cluster) %>%
+    summarize(total = sum(p_val_adj < 0.05)) %>%
+    complete(cluster) %>%
+    mutate(total = ifelse(is.na(total), 0, total))
   if (length(unique(markers$note)) > 1) {
-    df <- markers %>%
-      group_by(cluster, note) %>%
-      summarize(total = sum(p_val_adj < 0.05)) %>%
-      complete(cluster) %>%
-      mutate(total = ifelse(is.na(total), 0, total))
-  } else {
-    df <- markers %>%
-      group_by(cluster) %>%
-      summarize(total = sum(p_val_adj < 0.05)) %>%
-      complete(cluster) %>%
-      mutate(total = ifelse(is.na(total), 0, total))
+    df <- left_join(df, select(filter(markers, !duplicated(cluster)), 
+                               cluster, note), by = "cluster")
   }
   return(df)
 }
