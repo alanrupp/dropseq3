@@ -88,6 +88,25 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
     clusters <- sort(unique(object@active.ident))
   }
   
+  # if there are < 3 cells per cluster per sample, run standard FindMarkers
+  too_few <- table(object@active.ident, object$mouse) %>%
+    as.data.frame() %>%
+    filter(Freq < 3) %>%
+    .$Var1
+  if (length(too_few) > 0) {
+    few_markers <- map(
+      too_few, ~ FindMarkers(object, .x, only.pos = TRUE, verbose = FALSE)
+      )
+    few_markers <- map(few_markers, as.data.frame)
+    few_markers <- map(few_markers, ~ rownames_to_column(.x, "gene"))
+    few_markers <- map(seq(length(few_markers)),
+                       ~ mutate(few_markers[[.x]], "cluster" = too_few[.x]))
+    few_markers <- bind_rows(few_markers)
+    few_markers <- select(few_markers, -p_val)
+    few_markers <- mutate(few_markers, "note" = 'standard')
+    clusters <- clusters[!clusters %in% too_few]
+  }
+  
   # Run FindConservedMarkers on each cluster
   markers <- map(clusters, 
                  ~ FindConservedMarkers(object, .x, ident.2 = ident2,
@@ -136,10 +155,18 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
   
   # select only relevant columns
   markers <- select(markers, cluster, gene) %>%
-    mutate("pct.1" = pct1,
+    mutate("avg_logFC" = fc,
+           "pct.1" = pct1,
            "pct.2" = pct2,
-           "avg_logFC" = fc,
            "p_val_adj" = p_val)
+  
+  # add standard FindMarkers results
+  if (length(too_few) > 0) {
+    markers <- bind_rows(markers, few_markers)
+    markers <- mutate(markers, note = ifelse(is.na(note), 'conserved', note))
+  }
+  
+  # filter, arrange, and return final result
   markers <- filter(markers, p_val_adj < 0.05)
   markers <- markers %>%
     group_by(cluster) %>%
