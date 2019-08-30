@@ -121,32 +121,8 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
   markers <- bind_rows(markers)
   
   # run logitp function from metap package
-  logitp <- function(markers) {
-    # select only p values from data.frame
-    p_df <- select(markers, ends_with("p_val_adj"))
-    
-    # Calcaulte C value
-    calc_C <- function(p_df) {
-      k <- ncol(p_df)
-      C <- sqrt((k*pi^2*(5*k + 2))/(3*(5*k+4)))
-      return(C)
-    }
-    C <- calc_C(p_df)
-    
-    # convert each P value to log space
-    convert_p <- function(p) {
-      log(p / (1-p))
-    }
-    p_df <- apply(p_df, c(1,2), convert_p)
-    
-    # Calculate t value for each gene
-    calc_t <- function(p_df) {
-      apply(p_df, 1, function(x) -sum(x)/C)
-    }
-    p_val <- 2 * pt(calc_t(p_df), ncol(p_df)-1, lower.tail = FALSE)
-    return(p_val)
-  }
-  p_val <- logitp(markers)
+  p_vals <- select(markers, ends_with("p_val_adj"))
+  p_val <- map_dbl(seq(nrow(markers)) ~ metap::logitp(markers[.x,]$p))
   
   # calculate pct cells expressing gene and fold change
   pct1 <- rowMeans(select(markers, ends_with("pct.1")))
@@ -274,12 +250,16 @@ merge_markerless <- function(object, marker_summary) {
               "are most similar by expression correlation and UMAP distance.",
               "Merging cluster", cluster, "into cluster", other))
     object@active.ident[object@active.ident == cluster] <- other
+    object@active.ident <- factor(object@active.ident, 
+                                  levels = sort(unique(object@active.ident)))
     return(object)
   }
   drop_cells <- function(cluster) {
     cat(paste("Dropping cluster", cluster, "because it has no clear larger",
               "cluster to merge into."))
     object <- SubsetData(object, ident.remove = cluster)
+    object@active.ident <- factor(object@active.ident, 
+                                  levels = sort(unique(object@active.ident)))
     return(object)
   }
   for (i in seq(nrow(result))) {
