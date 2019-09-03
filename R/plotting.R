@@ -492,7 +492,8 @@ umap_plot <- function(object, genes = NULL, cells = NULL, clusters = NULL,
       df <- object@assays$RNA@data[genes, ] %>% as.data.frame() %>% 
         set_names(genes)
     } else {
-      df <- object@assays$RNA@data %>% as.matrix() %>% t() %>% as.data.frame()
+      df <- object@assays$RNA@data[genes, ] %>% 
+        as.matrix() %>% t() %>% as.data.frame()
     }
     return(df)
   }
@@ -505,7 +506,8 @@ umap_plot <- function(object, genes = NULL, cells = NULL, clusters = NULL,
   plt <-
     ggplot(results, aes(x = UMAP1, y = UMAP2)) +
     geom_point(aes(color = value), show.legend = legend, stroke = 0) +
-    scale_color_gradient(low = "gray90", high = "navyblue") +
+    scale_color_gradient(low = "gray90", high = "navyblue",
+                         name = expression(underline("Expression"))) +
     theme_bw() +
     theme(panel.grid = element_blank()) +
     facet_wrap(~gene, ncol = ncol) +
