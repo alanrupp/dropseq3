@@ -477,7 +477,7 @@ umap_plot <- function(object, genes = NULL, cells = NULL, clusters = NULL,
   umap <- data.frame(
     UMAP1 = object@reductions$umap@cell.embeddings[, 1],
     UMAP2 = object@reductions$umap@cell.embeddings[, 2]
-  ) %>% rownames_to_column("barcode")
+  )
   
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
@@ -489,23 +489,21 @@ umap_plot <- function(object, genes = NULL, cells = NULL, clusters = NULL,
   
   pull_data <- function(genes) {
     if (length(genes) == 1) {
-      df <- object@assays$RNA@counts[genes, ] %>% as.data.frame() %>% 
+      df <- object@assays$RNA@data[genes, ] %>% as.data.frame() %>% 
         set_names(genes)
     } else {
-      df <- object@assays$RNA@counts %>% as.matrix() %>% t() %>% as.data.frame()
+      df <- object@assays$RNA@data %>% as.matrix() %>% t() %>% as.data.frame()
     }
     return(df)
   }
   
   results <- pull_data(genes) %>%
-    rownames_to_column("barcode") %>%
-    left_join(., umap, by = "barcode") %>%
-    select(-barcode) %>%
+    bind_cols(., umap) %>%
     gather(-starts_with("UMAP"), key = "gene", value = "value")
   
   # plot
   plt <-
-    ggplot(results, aes(x = UMAP_1, y = UMAP_2)) +
+    ggplot(results, aes(x = UMAP1, y = UMAP2)) +
     geom_point(aes(color = value), show.legend = legend, stroke = 0) +
     scale_color_gradient(low = "gray90", high = "navyblue") +
     theme_bw() +
@@ -513,13 +511,10 @@ umap_plot <- function(object, genes = NULL, cells = NULL, clusters = NULL,
     facet_wrap(~gene, ncol = ncol) +
     xlab("UMAP1") + ylab("UMAP2")
   if (cluster_label == TRUE) {
-    cluster_center <- 
-      left_join(umap, data.frame("barcode" = names(object@active.ident),
-                                 "cluster" = object@active.ident), by = "barcode") %>%
-      select(-barcode)
+    cluster_center <- mutate(umap, "cluster" = object@active.ident)
     cluster_center <- cluster_center %>%
       group_by(cluster) %>%
-      summarize(UMAP_1 = mean(UMAP_1), UMAP_2 = mean(UMAP_2))
+      summarize(UMAP1 = mean(UMAP1), UMAP2 = mean(UMAP2))
     plt <- plt + geom_text(data = cluster_center, aes(label = cluster))
   }
   if (!is.null(xlim)) {
