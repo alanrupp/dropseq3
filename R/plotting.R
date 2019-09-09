@@ -326,7 +326,7 @@ violin_plot <- function(object, genes, tx = NULL, clusters = NULL,
     clusters <- sort(unique(object@active.ident))
   }
   if (is.null(colors)) {
-    colors <- 
+    colors <- gg_color_hue(length(clusters))
   }
   
   # check that genes & clusters are in object
@@ -383,6 +383,7 @@ violin_plot <- function(object, genes, tx = NULL, clusters = NULL,
   # generic plot attributes
   plt <- plt + 
     geom_violin(show.legend = FALSE, scale = "width", adjust = 1) +
+    scale_fill_manual(values = colors) +
     theme_bw() +
     scale_y_continuous(expand = c(0,0)) +
     theme(panel.grid = element_blank())
@@ -428,10 +429,8 @@ stacked_violin <- function(object, genes, cluster_order = NULL,
   # make plots for all but last one
   data_plots <- map(genes, 
                   ~ violin_plot(object, genes = .x, 
-                                jitter = FALSE, void = TRUE) #+
-                    #theme(#axis.title = element_text(color = "black"), 
-                    #      axis.title.x = element_blank()) + 
-                    #ylab(.x)
+                                jitter = FALSE, void = TRUE,
+                                colors = colors)
                   )
   
   # make plots for all gene names for left-hand side
