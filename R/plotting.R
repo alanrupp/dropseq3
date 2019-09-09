@@ -45,6 +45,13 @@ summarize_data <- function(object, genes, clusters = NULL) {
 }
 
 
+# - GG color hue --------------------------------------------------------------
+# from John Colby on Stack Overflow
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+
 # - Heatmap plot --------------------------------------------------------------
 order_clusters <- function(object, cells = NULL, genes = NULL, scale = TRUE,
                            col_names = FALSE, row_names = FALSE, 
@@ -313,9 +320,13 @@ heatmap_block <- function(object,
 violin_plot <- function(object, genes, tx = NULL, clusters = NULL, 
                         jitter = TRUE, stacked = FALSE, order_genes = FALSE,
                         ncol = NULL, flip = FALSE, void = FALSE, 
-                        order_clusters = FALSE) {
+                        order_clusters = FALSE,
+                        colors = NULL) {
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
+  }
+  if (is.null(colors)) {
+    colors <- 
   }
   
   # check that genes & clusters are in object
@@ -403,7 +414,8 @@ violin_plot <- function(object, genes, tx = NULL, clusters = NULL,
 
 
 # - Stacked violin plot -----------------------------------------------------
-stacked_violin <- function(object, genes, cluster_order = NULL) {
+stacked_violin <- function(object, genes, cluster_order = NULL,
+                           colors = NULL) {
   # grab cluster order
   if (is.null(cluster_order)) {
     clusters <- sort(unique(object@active.ident))
