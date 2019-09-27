@@ -83,7 +83,7 @@ find_classes <- function(object, markers_df) {
 # - Find all conserved markers -----------------------------------------------
 FindAllConservedMarkers <- function(object, ident2 = NULL, 
                                     groupby = NULL, clusters = NULL,
-                                    verbose = FALSE) {
+                                    verbose = TRUE) {
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   }
@@ -93,9 +93,10 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
     as.data.frame() %>%
     filter(Freq < 3) %>%
     .$Var1
+  too_few <- too_few[too_few %in% clusters]
   if (length(too_few) > 0) {
     few_markers <- map(
-      too_few, ~ FindMarkers(object, .x, only.pos = TRUE, verbose = FALSE)
+      too_few, ~ FindMarkers(object, .x, only.pos = TRUE, verbose = verbose)
       )
     few_markers <- map(few_markers, as.data.frame)
     few_markers <- map(few_markers, ~ rownames_to_column(.x, "gene"))
@@ -120,9 +121,16 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
                  ~ mutate(markers[[which(clusters == .x)]], "cluster" = .x))
   markers <- bind_rows(markers)
   
-  # run logitp function from metap package
-  p_vals <- select(markers, ends_with("p_val_adj"))
-  p_val <- map_dbl(seq(nrow(markers)) ~ metap::logitp(markers[.x,]$p))
+  # run logitp function from metap package to combine p values
+  combine_p <- function(markers) {
+    p_vals <- select(markers, ends_with("p_val_adj"))
+    p_vals <- as.data.frame(p_vals)
+    # convert any 1 to 1-10^-9
+    p_vals <- sapply(p_vals, function(x) ifelse(x == 1, 1-10^-6, x))
+    p_vals <- apply(p_vals, 1, function(x) metap::logitp(x)$p)
+    return(p_vals)
+  }
+  p_vals <- combine_p(markers)
   
   # calculate pct cells expressing gene and fold change
   pct1 <- rowMeans(select(markers, ends_with("pct.1")))
@@ -134,7 +142,7 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
     mutate("avg_logFC" = fc,
            "pct.1" = pct1,
            "pct.2" = pct2,
-           "p_val_adj" = p_val)
+           "p_val_adj" = p_vals)
   
   # add standard FindMarkers results
   if (length(too_few) > 0) {
@@ -436,4 +444,49 @@ find_doublet_clusters <- function(object, doublets) {
       return(NULL)
     }
   }
+}
+
+
+# - edgeR for treatment effects -----------------------------------------------
+edgeR_test <- function(mtx, metadata, treatment) {
+  library(edgeR)
+  y <- DGEList(counts = mtx, group = metadata[, treatment])
+  y <- calcNormFactors(y)
+  design <- model.matrix(~ 0 + metadata[, treatment])
+  colnames(design) <- levels(metadata[, treatment])
+  y <- estimateDisp(y, design)
+  
+  contrasts <- makeContrasts(
+    "0" = CNO_0 - Saline_0,
+    "1" = CNO_1 - Saline_1,
+    "2" = CNO_2 - Saline_2,
+    "3" = CNO_3 - Saline_3,
+    "4" = CNO_4 - Saline_4,
+    "5" = CNO_5 - Saline_5,
+    "6" = CNO_6 - Saline_6,
+    "7" = CNO_7 - Saline_7,
+    "8" = CNO_8 - Saline_8,
+    "9" = CNO_9 - Saline_9,
+    "10" = CNO_10 - Saline_10,
+    "11" = CNO_11 - Saline_11,
+    levels = design
+  )
+  
+  # perform LRT
+  fit <- glmFit(y, design)
+  de <- function(coef) {
+    lrt <- glmLRT(fit, contrast = contrasts[, coef])
+    topTags(lrt, n = nrow(mtx))
+  }
+  result <- map(colnames(contrasts), de)
+  names(result) <- colnames(contrasts)
+  result <- map(result, as.data.frame)
+  result <- map(result, ~ rownames_to_column(.x, "gene"))
+  
+  map(result, ~ sum(.x$FDR < 0.05, na.rm = TRUE))
+  result <- map(seq(length(result)),
+                ~ mutate(result[[.x]], "cluster" = names(result)[.x]))
+  result <- bind_rows(result)
+  
+  
 }
