@@ -69,7 +69,7 @@ remove_low_abundance_genes <- function(mtx, min_cells = 4) {
 rename_duplicates <- function(mtx) {
   if (sum(duplicated(colnames(do.call(cbind, mtx)))) > 0) {
     new_names <- function(dim) {
-      other <- colnames(unlist(mtx[[-dim]]))
+      other <- unlist(map(mtx[-1], colnames))
       current <- colnames(mtx[[dim]])
       current <- ifelse(current %in% other, paste0(current, "-", dim), current)
       colnames(mtx[[dim]]) <- current
