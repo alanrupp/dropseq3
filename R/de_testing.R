@@ -2,19 +2,10 @@ library(Seurat)
 library(tidyverse)
 
 # - Choose PCs --------------------------------------------------------------
-choose_pcs <- function(object, reps = 100) {
-  
-}
-
-# - Cluster -------------------------------------------------------------------
-cluster <- function(object, pcs = 50) {
-  object <- RunPCA(object, verbose = FALSE)
-  object <- JackStraw(object, dims = pcs)
-  object <- ScoreJackStraw(object, dims = 1:pcs)
-  insig <- which(
-    object@reductions$pca@jackstraw@overall.p.values[, "Score"] >= 0.05
-  )
-  while (length(insig) == 0) {
+pca <- function(object) {
+  # run PCA (adding 50 PCs each time) to capture all significant PCs
+  pcs <- 0
+  while (TRUE) {
     pcs <- pcs + 50
     object <- RunPCA(object, verbose = FALSE, npcs = pcs)
     object <- JackStraw(object, dims = pcs)
@@ -22,13 +13,13 @@ cluster <- function(object, pcs = 50) {
     insig <- which(
       object@reductions$pca@jackstraw@overall.p.values[,"Score"] >= 0.05
     )
+    if (length(insig) != 0) {
+      break()
+    }
   }
   pcs <- insig[1] - 1
   print(paste("Using", pcs, "PCs"))
-  # Find neighbors and cluster
-  object <- FindNeighbors(object, dims = 1:pcs)
-  object <- choose_resolution(object)
-  object <- RunUMAP(object, dims = 1:pcs, verbose = FALSE)
+  object@reductions$pca@misc$sig_pcs <- pcs
   return(object)
 }
 
@@ -36,14 +27,13 @@ cluster <- function(object, pcs = 50) {
 choose_resolution <- function(object, 
                               resolutions = seq(0.4, 2, by = 0.2),
                               assay = "integrated") {
-  object <- FindClusters(object, resolution = resolutions)
-  
+  dims <- 1:object@reductions$pca@misc$sig_pcs
   # calc silhouettes for all resolutions
-  calc_silhouettes <- function(resolution, assay = "integrated", pcs) {
+  calc_silhouettes <- function(resolution, assay = "integrated") {
     col <- paste0(assay, "_snn_res.", resolution)
     sil <- cluster::silhouette(
       as.numeric(object@meta.data[, col]), 
-      cluster::daisy(object@reductions$pca@cell.embeddings[, 1:pcs])
+      cluster::daisy(object@reductions$pca@cell.embeddings[, dims])
     )
     return(sil[,3])
   }
@@ -62,7 +52,20 @@ choose_resolution <- function(object,
   ident_name <- paste0(assay, "_snn_res.", best_width)
   object@active.ident <- object@meta.data[, ident_name]
   names(object@active.ident) <- rownames(object@meta.data)
+  return(object)
 }
+
+# - Cluster -------------------------------------------------------------------
+cluster <- function(object, resolutions = seq(0.4, 2, by = 0.2)) {
+  pcs <- 1:object@reductions$pca@misc$sig_pcs
+  # Find neighbors and cluster and different resolutions
+  object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE)
+  object <- FindClusters(object, resolution = resolutions, verbose = FALSE)
+  object <- choose_resolution(object)
+  object <- RunUMAP(object, dims = 1:pcs, verbose = FALSE)
+  return(object)
+}
+
 
 # find highly expressed genes -----------------------------------------------
 find_expressed <- function(object, min_cells = 10, min_counts = 1) {
