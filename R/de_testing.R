@@ -1,6 +1,33 @@
 library(Seurat)
 library(tidyverse)
 
+# - Grab cell names by cluster membership or dismembership -------------------
+cluster_cells <- function(object, cluster) {
+  names(object@active.ident)[object@active.ident == cluster]
+}
+other_cells <- function(object, cluster) {
+  names(object@active.ident)[object@active.ident != cluster]
+}
+
+# - Cluster means -------------------------------------------------------------
+cluster_means <- function(object, genes = NULL, assay = "RNA", 
+                          data_slot = "scale.data") {
+  clusters <- sort(unique(object@active.ident))
+  mtx <- slot(slot(object, "assays")[[assay]], data_slot)
+  if (is.null(genes)) {
+    genes <- rownames(object@assays$RNA@scale.data)
+  }
+  df <-
+    map(clusters,
+        ~ Matrix::rowMeans(mtx[genes, cluster_cells(object, .x)])
+    ) %>% 
+    set_names(clusters) %>%
+    bind_cols() %>%
+    as.data.frame()
+  rownames(df) <- genes
+  return(df)
+}
+
 # - Choose PCs --------------------------------------------------------------
 pca <- function(object) {
   # run PCA (adding 50 PCs each time) to capture all significant PCs
@@ -24,9 +51,7 @@ pca <- function(object) {
 }
 
 # - Choose resolution --------------------------------------------------------
-choose_resolution <- function(object, 
-                              resolutions = seq(0.4, 2, by = 0.2),
-                              assay = "integrated") {
+choose_resolution <- function(object, assay = "integrated") {
   dims <- 1:object@reductions$pca@misc$sig_pcs
   # calc silhouettes for all resolutions
   calc_silhouettes <- function(resolution, assay = "integrated") {
@@ -56,8 +81,14 @@ choose_resolution <- function(object,
 }
 
 # - Cluster -------------------------------------------------------------------
-cluster <- function(object, resolutions = seq(0.4, 2, by = 0.2)) {
-  pcs <- 1:object@reductions$pca@misc$sig_pcs
+cluster <- function(object, assay = "integrated",
+                    resolutions = seq(0.4, 2, by = 0.2)) {
+  if (assay == "integrated") {
+    DefaultAssay(object) <- "integrated"
+  } else {
+    DefaultAssay(object) <- "RNA"
+  }
+  pcs <- object@reductions$pca@misc$sig_pcs
   # Find neighbors and cluster and different resolutions
   object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE)
   object <- FindClusters(object, resolution = resolutions, verbose = FALSE)
@@ -240,76 +271,83 @@ summarize_markers <- function(markers) {
 
 # - Merge markerless --------------------------------------------------------
 # merge markerless clusters with nearest neighbor by both correlation and UMAP
-merge_markerless <- function(object, marker_summary) {
+merge_markerless <- function(object, markers) {
+  marker_summary <- summarize_markers(markers)
   markerless <- filter(marker_summary, total == 0)$cluster
+  
   if (length(markerless) == 1) {
     cat(paste("Cluster", markerless, 
               "has no significantly enriched genes. Merging with neighbors or dropping. ")
     )
   } else if (length(markerless) > 1) {
-    cat(paste("Clusters", paste(markerless, collpase = ", "), 
+    cat(paste("Clusters", paste(markerless, collapse = ", "), 
               "have no significantly enriched genes. Merging with neighbors or dropping. ")
     )
   } else {
     return(object)
   }
   genes <- unique(markers$gene)
-  genes <- genes[genes %in% rownames(srt@assays$RNA@scale.data)]
+  genes <- genes[genes %in% rownames(object@assays$RNA@scale.data)]
 
   # find correlation between clusters and markerless
   grab_cells <- function(cluster) {
     names(object@active.ident)[object@active.ident == cluster]
   }
+  cluster_correlations <-
+    map_dbl(unique(object@active.ident),
+            ~ cor(Matrix::rowMeans(object@assays$RNA@scale.data[
+              genes, grab_cells(.x)]
+            ),
+            Matrix::rowMeans(object@assays$RNA@scale.data[
+              genes, grab_cells(cluster)]
+            )
+            )
+    )
+  names(correlation) <- unique(object@active.ident)
+  # remove self-correlation
+  cluster_correlations <- cluster_correlations[cluster_correlations != 1]
+  
   correlation <- function(cluster) {
-    corr <- 
-      map(unique(object@active.ident),
-          ~ cor(Matrix::rowMeans(object@assays$RNA@scale.data[genes, grab_cells(.x)]),
-                Matrix::rowMeans(object@assays$RNA@scale.data[genes, grab_cells(cluster)]))
-    ) %>% unlist()
-    names(corr) <- unique(object@active.ident)
-    # remove self-correlation
-    corr <- corr[corr != 1]
-    # only keep correlations greater than the median
     neighbor <- names(corr)[corr == max(corr)]
     neighbor <- as.integer(neighbor)
     return(neighbor)
   }
   
   # find umap neighbor
+  cluster_neighbors <- function(object) {
+    data.frame(
+    "cluster" = object@active.ident,
+    "UMAP1" = object@reductions$umap@cell.embeddings[, 1],
+    "UMAP2" = object@reductions$umap@cell.embeddings[, 2]
+  ) %>%
+    group_by(cluster) %>%
+    summarize(UMAP1 = median(UMAP1), UMAP2 = median(UMAP2)) %>%
+    as.data.frame() %>%
+    column_to_rownames("cluster") %>%
+    dist %>%
+    as.matrix() %>%
+    as.data.frame() %>%
+    rownames_to_column("cluster") %>%
+    gather(-cluster, key = "other", value = "dist") %>%
+    filter(dist != 0) %>%
+    group_by(cluster) %>%
+    filter(dist == min(dist))
+  }
+  neighbors <- cluster_neighbors(object)
+  
   umap_neighbor <- function(clstr) {
-    cluster_centers <- data.frame(
-      "cluster" = object@active.ident,
-      "UMAP1" = object@reductions$umap@cell.embeddings[,1],
-      "UMAP2" = object@reductions$umap@cell.embeddings[,2]
-    ) %>%
-      group_by(cluster) %>%
-      summarize(UMAP1 = median(UMAP1), UMAP2 = median(UMAP2)) %>%
-      as.data.frame() %>%
-      column_to_rownames("cluster")
-    dists <- 
-      dist(cluster_centers) %>%
-      as.matrix() %>%
-      as.data.frame() %>%
-      rownames_to_column("cluster") %>%
-      gather(-cluster, key = "other", value = "dist")
-    dists <- filter(dists, dist != 0)
-    min_dist <- dists %>%
-      group_by(cluster) %>%
-      summarize(closest = min(dist))
-    neighbor <- filter(dists, cluster == clstr & 
-                         dist == filter(min_dist, cluster == clstr)$closest)
-    if (neighbor$dist < median(min_dist$closest)) {
-      return(neighbor$other)
-      print(paste("umap", class(neighbor$other)))
+    if (umap_neighbors$dist[umap_neighbors$cluster == clstr, ] < 
+        mean(min_dist$closest)) {
+      return(umap_neighbors$other)
     } else {
       return(NULL)
     }
   }
   
-  # find neighbors for all markerless clusters
+  # find most similar cluster for all markerless clusters
   corr <- vector()
   umap <- vector()
-  for (i in seq(length(markerless))) {
+  for (i in 1:length(markerless)) {
     corr[i] <- correlation(markerless[i])
     umap[i] <- umap_neighbor(markerless[i])
   }
@@ -327,7 +365,7 @@ merge_markerless <- function(object, marker_summary) {
     return(object)
   }
   drop_cells <- function(cluster) {
-    cat(paste("Dropping cluster", cluster, "because it has no clear larger",
+    cat(paste("Dropping cluster", cluster, "because it has no clear other",
               "cluster to merge into."))
     object <- SubsetData(object, ident.remove = cluster)
     object@active.ident <- factor(object@active.ident, 
