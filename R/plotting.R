@@ -17,7 +17,8 @@ summarize_data <- function(object, genes, clusters = NULL) {
   if (length(genes) == 0) {
     return(NULL)
   } else if (length(genes) == 1) {
-    df <- object@assays$RNA@data[genes, ] %>% as.data.frame() %>% t() %>% as.data.frame()
+    df <- object@assays$RNA@data[genes, ] %>% as.data.frame() %>% t() %>% 
+      as.data.frame()
     rownames(df) <- genes
   } else {
     df <- object@assays$RNA@data[genes, ] %>% as.matrix() %>% as.data.frame()
@@ -481,9 +482,11 @@ stacked_violin <- function(object, genes, cluster_order = NULL,
 
 
 # - UMAP plot ----------------------------------------------------------------
-umap_plot <- function(object, genes = NULL, cells = NULL, clusters = NULL, 
+umap_plot <- function(object, genes, cells = NULL, clusters = NULL, 
                       legend = FALSE, cluster_label = FALSE,
                       ncol = NULL, xlim = NULL, ylim = NULL) {
+  
+  
   # pull UMAP data
   umap <- data.frame(
     UMAP1 = object@reductions$umap@cell.embeddings[, 1],
@@ -493,11 +496,18 @@ umap_plot <- function(object, genes = NULL, cells = NULL, clusters = NULL,
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   } else {
-    cluster_bool <- object@active.ident %in% clusters
-    clusters <- clusters[cluster_bool]
-    umap <- umap[cluster_bool, ]
+    clusters <- clusters[object@active.ident %in% clusters]
+    umap <- umap[object@active.ident %in% clusters, ]
   }
   
+  # pull expression data
+  if (sum(!genes %in% rownames(object@assays$RNA@data))) {
+    wrong_genes <- genes[!genes %in% rownames(object@assays$RNA@data)]
+    warning(paste(
+      "Warning:", paste(wrong_genes, collapse = ", "), "not in dataset."
+    ))
+    genes <- genes[!genes %in% wrong_genes]
+  }
   pull_data <- function(genes) {
     if (length(genes) == 1) {
       df <- object@assays$RNA@data[genes, ] %>% as.data.frame() %>% 
