@@ -1,6 +1,67 @@
+library(Seurat)
+library(tidyverse)
+
 # - Choose PCs --------------------------------------------------------------
 choose_pcs <- function(object, reps = 100) {
   
+}
+
+# - Cluster -------------------------------------------------------------------
+cluster <- function(object, pcs = 50) {
+  object <- RunPCA(object, verbose = FALSE)
+  object <- JackStraw(object, dims = pcs)
+  object <- ScoreJackStraw(object, dims = 1:pcs)
+  insig <- which(
+    object@reductions$pca@jackstraw@overall.p.values[, "Score"] >= 0.05
+  )
+  while (length(insig) == 0) {
+    pcs <- pcs + 50
+    object <- RunPCA(object, verbose = FALSE, npcs = pcs)
+    object <- JackStraw(object, dims = pcs)
+    object <- ScoreJackStraw(object, dims = 1:pcs)
+    insig <- which(
+      object@reductions$pca@jackstraw@overall.p.values[,"Score"] >= 0.05
+    )
+  }
+  pcs <- insig[1] - 1
+  print(paste("Using", pcs, "PCs"))
+  # Find neighbors and cluster
+  object <- FindNeighbors(object, dims = 1:pcs)
+  object <- choose_resolution(object)
+  object <- RunUMAP(object, dims = 1:pcs, verbose = FALSE)
+  return(object)
+}
+
+# - Choose resolution --------------------------------------------------------
+choose_resolution <- function(object, 
+                              resolutions = seq(0.4, 2, by = 0.2),
+                              assay = "integrated") {
+  object <- FindClusters(object, resolution = resolutions)
+  
+  # calc silhouettes for all resolutions
+  calc_silhouettes <- function(resolution, assay = "integrated", pcs) {
+    col <- paste0(assay, "_snn_res.", resolution)
+    sil <- cluster::silhouette(
+      as.numeric(object@meta.data[, col]), 
+      cluster::daisy(object@reductions$pca@cell.embeddings[, 1:pcs])
+    )
+    return(sil[,3])
+  }
+  silhouettes <- map(resolutions, calc_silhouettes)
+  
+  # choose resolution with highest mean silhouette width
+  best_width <- silhouettes %>% 
+    set_names(resolutions) %>%
+    map_dbl(., mean) %>%
+    sort(decreasing = TRUE) %>%
+    .[1] %>%
+    names()
+  print(paste("Using resolution", best_width, "for clustering."))
+  
+  # assign clusters to active.ident slot
+  ident_name <- paste0(assay, "_snn_res.", best_width)
+  object@active.ident <- object@meta.data[, ident_name]
+  names(object@active.ident) <- rownames(object@meta.data)
 }
 
 # find highly expressed genes -----------------------------------------------
@@ -487,6 +548,4 @@ edgeR_test <- function(mtx, metadata, treatment) {
   result <- map(seq(length(result)),
                 ~ mutate(result[[.x]], "cluster" = names(result)[.x]))
   result <- bind_rows(result)
-  
-  
 }
