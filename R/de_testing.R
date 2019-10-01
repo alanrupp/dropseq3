@@ -15,7 +15,7 @@ cluster_means <- function(object, genes = NULL, assay = "RNA",
   clusters <- sort(unique(object@active.ident))
   mtx <- slot(slot(object, "assays")[[assay]], data_slot)
   if (is.null(genes)) {
-    genes <- rownames(object@assays$RNA@scale.data)
+    genes <- rownames(mtx)
   }
   df <-
     map(clusters,
@@ -270,47 +270,18 @@ summarize_markers <- function(markers) {
 
 
 # - Merge markerless --------------------------------------------------------
-# merge markerless clusters with nearest neighbor by both correlation and UMAP
+# merge markerless clusters with nearest UMAP neighbor
 merge_markerless <- function(object, markers) {
   marker_summary <- summarize_markers(markers)
   markerless <- filter(marker_summary, total == 0)$cluster
   
-  if (length(markerless) == 1) {
-    cat(paste("Cluster", markerless, 
-              "has no significantly enriched genes. Merging with neighbors or dropping. ")
-    )
-  } else if (length(markerless) > 1) {
-    cat(paste("Clusters", paste(markerless, collapse = ", "), 
+  # print clusters that don't have markers
+  if (length(markerless) >= 1) {
+    print(paste("Cluster(s)", paste(markerless, collapse = ", "), 
               "have no significantly enriched genes. Merging with neighbors or dropping. ")
     )
   } else {
     return(object)
-  }
-  genes <- unique(markers$gene)
-  genes <- genes[genes %in% rownames(object@assays$RNA@scale.data)]
-
-  # find correlation between clusters and markerless
-  grab_cells <- function(cluster) {
-    names(object@active.ident)[object@active.ident == cluster]
-  }
-  cluster_correlations <-
-    map_dbl(unique(object@active.ident),
-            ~ cor(Matrix::rowMeans(object@assays$RNA@scale.data[
-              genes, grab_cells(.x)]
-            ),
-            Matrix::rowMeans(object@assays$RNA@scale.data[
-              genes, grab_cells(cluster)]
-            )
-            )
-    )
-  names(correlation) <- unique(object@active.ident)
-  # remove self-correlation
-  cluster_correlations <- cluster_correlations[cluster_correlations != 1]
-  
-  correlation <- function(cluster) {
-    neighbor <- names(corr)[corr == max(corr)]
-    neighbor <- as.integer(neighbor)
-    return(neighbor)
   }
   
   # find umap neighbor
@@ -334,52 +305,39 @@ merge_markerless <- function(object, markers) {
     filter(dist == min(dist))
   }
   neighbors <- cluster_neighbors(object)
-  
-  umap_neighbor <- function(clstr) {
-    if (umap_neighbors$dist[umap_neighbors$cluster == clstr, ] < 
-        mean(min_dist$closest)) {
-      return(umap_neighbors$other)
-    } else {
-      return(NULL)
-    }
-  }
-  
-  # find most similar cluster for all markerless clusters
-  corr <- vector()
-  umap <- vector()
-  for (i in 1:length(markerless)) {
-    corr[i] <- correlation(markerless[i])
-    umap[i] <- umap_neighbor(markerless[i])
-  }
-  result <- data.frame("corr" = corr, "umap" = umap)
-  rownames(result) <- markerless
-  
-  # merge or drop cells based on neighbors
+  neighbors <- neighbors %>% ungroup() %>% mutate(
+    "cluster" = factor(cluster, levels = levels(object@active.ident)),
+    "other" = factor(other, levels = levels(object@active.ident))
+  )
+  markerless_neighbors <- filter(neighbors, cluster %in% markerless)
+
+  # merge or drop cells based on distance to nearest neighbor
   merge_cells <- function(cluster, other) {
-    cat(paste("Cluster", cluster, "and cluster", other,
-              "are most similar by expression correlation and UMAP distance.",
-              "Merging cluster", cluster, "into cluster", other))
+    print(paste("Cluster", cluster, "and cluster", other,
+              "are UMAP neighbors.",
+              "Merging cluster", cluster, "into cluster", other, '.'))
     object@active.ident[object@active.ident == cluster] <- other
-    object@active.ident <- factor(object@active.ident, 
-                                  levels = sort(unique(object@active.ident)))
     return(object)
   }
   drop_cells <- function(cluster) {
-    cat(paste("Dropping cluster", cluster, "because it has no clear other",
+    print(paste("Dropping cluster", cluster, "because it has no clear other",
               "cluster to merge into."))
     object <- SubsetData(object, ident.remove = cluster)
-    object@active.ident <- factor(object@active.ident, 
-                                  levels = sort(unique(object@active.ident)))
     return(object)
   }
-  for (i in seq(nrow(result))) {
+  mean_dist <- mean(neighbors$dist)
+  for (i in 1:nrow(markerless_neighbors)) {
     # if both umap and corr are the same, merge clusters
-    if (all(result[i, ] == result[i,1])) {
-      object <- merge_cells(rownames(result[i,]), result[i,1])
+    if (markerless_neighbors[i, "dist"] < mean_dist) {
+      object <- merge_cells(markerless_neighbors[i, ]$cluster, 
+                            markerless_neighbors[i, ]$other)
     } else {
-      object <- drop_cells(rownames(result[i,]))
+      object <- drop_cells(markerless_neighbors[i, ]$cluster)
     }
   }
+  # reset factor levels
+  object@active.ident <- factor(object@active.ident, 
+                                levels = sort(unique(object@active.ident)))
   return(object)
 }
 
