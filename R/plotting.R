@@ -483,16 +483,8 @@ stacked_violin <- function(object, genes, cluster_order = NULL,
 
 # - UMAP plot ----------------------------------------------------------------
 umap_plot <- function(object, genes, cells = NULL, clusters = NULL, 
-                      legend = FALSE, cluster_label = FALSE,
+                      legend = TRUE, cluster_label = FALSE,
                       ncol = NULL, xlim = NULL, ylim = NULL) {
-  
-  
-  # pull UMAP data
-  umap <- data.frame(
-    UMAP1 = object@reductions$umap@cell.embeddings[, 1],
-    UMAP2 = object@reductions$umap@cell.embeddings[, 2]
-  )
-  
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   } else {
@@ -519,9 +511,22 @@ umap_plot <- function(object, genes, cells = NULL, clusters = NULL,
     return(df)
   }
   
+  # pull UMAP data
+  umap <- data.frame(
+    UMAP1 = object@reductions$umap@cell.embeddings[, 1],
+    UMAP2 = object@reductions$umap@cell.embeddings[, 2]
+  )
+  
+  # combine umap and expression data
   results <- pull_data(genes) %>%
     bind_cols(., umap) %>%
     gather(-starts_with("UMAP"), key = "gene", value = "value")
+  
+  # standardize fill
+  results <- results %>%
+    group_by(gene) %>%
+    mutate(value = value / mean(value)) %>%
+    ungroup()
   
   # plot
   plt <-
@@ -530,7 +535,8 @@ umap_plot <- function(object, genes, cells = NULL, clusters = NULL,
     scale_color_gradient(low = "gray90", high = "navyblue",
                          name = expression(underline("Expression"))) +
     theme_bw() +
-    theme(panel.grid = element_blank()) +
+    theme(panel.grid = element_blank(),
+          legend.text = element_blank()) +
     facet_wrap(~gene, ncol = ncol) +
     xlab("UMAP1") + ylab("UMAP2")
   if (cluster_label == TRUE) {
@@ -709,3 +715,16 @@ flamemap <- function(object, genes, cells = NULL, n_bars = 100,
 
 
 # - Eigengene plot ----------------------------------------------------------
+
+
+# - Plot resolutions ----------------------------------------------------------
+plot_resolutions <- function(object, assay = "integrated") {
+  if (assay == "integrated") {
+    
+  }
+  cowplot::plot_grid(
+    plotlist = map(resolutions,
+                   ~ DimPlot(neurons, group.by = paste0("integrated_snn_res.", .x))
+    ))
+}
+
