@@ -347,40 +347,47 @@ find_unique_genes <- function(object, genes = NULL, clusters = NULL,
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   }
-  # grab cells from cluster and other clusters
-  grab_cells <- function(cluster) {
-    names(object@active.ident)[object@active.ident == cluster]
+  if (is.null(genes)) {
+    genes <- rownames(mtx)
   }
-  # set up data.frame
-  df <- expand.grid(genes, clusters)
-  df <- rename(df, "gene" = Var1, "cluster" = Var2)
-  # calculate pct expressing for each gene and cluster
-  pct_expressing <- function(gene, cluster) {
-    sum(object@assays$RNA@counts[gene, grab_cells(cluster)] > 0) /
-      length(grab_cells(cluster))
+  mtx <- object@assays$RNA@counts
+  
+  cluster_expression <- function(mtx) {
+    df <-
+      map(clusters,
+          ~ Matrix::rowMeans(mtx[genes, cluster_cells(object, .x)] > 0)
+      ) %>% 
+      set_names(clusters)
+    return(df)
   }
-  df$pct <- apply(df, 1, function(x) pct_expressing(x[1], x[2]))
+  df <- cluster_expression(mtx)
+  df <- bind_cols(df)
   
-  # find largest difference
-  by_gene <- df %>%
-    ungroup() %>%
-    arrange(desc(pct)) %>%
-    group_by(gene) %>%
-    summarize("first" = max(pct), "second" = nth(pct, 2)) %>%
-    mutate("diff" = first - second) %>%
-    arrange(desc(diff))
-  by_cluster <- df %>%
-    group_by(gene) %>%
-    filter(pct == max(pct)) %>%
-    select(-pct)
+  # top 1 and 2 clusters for each gene
+  first <- apply(df, 1, function(x) names(sort(x, decreasing = TRUE)[1]))
+  second <- apply(df, 1, function(x) names(sort(x, decreasing = TRUE)[2]))
+  diff <- apply(df, 1, function(x) sort(x, decreasing = TRUE)[1] - 
+                  sort(x, decreasing = TRUE)[2])
   
-  # return top n gene(s) for each cluster
-  result <- inner_join(by_gene, by_cluster, by = "gene")
+  # result
+  result <- data.frame(
+    "gene" = genes,
+    "first" = first,
+    "second" = second,
+    "diff" = diff
+  )
+  
+  # set factor levels
+  result <- result %>% 
+    mutate_at(vars(first, second), ~ factor(.x, levels = levels(object@active.ident)))
+  
+  # keep top n
   result <- result %>%
-    group_by(cluster) %>% 
-    slice(top_n) %>%
+    arrange(desc(diff)) %>%
+    group_by(first) %>%
+    slice(1:top_n) %>%
     ungroup() %>%
-    arrange(cluster)
+    arrange(first)
   
   return(result)
 }
