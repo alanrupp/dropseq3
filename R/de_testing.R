@@ -51,26 +51,38 @@ pca <- function(object) {
 }
 
 # - Choose resolution --------------------------------------------------------
-choose_resolution <- function(object, assay = "integrated") {
+choose_resolution <- function(object, resolutions = NULL, 
+                              assay = "integrated") {
   dims <- 1:object@reductions$pca@misc$sig_pcs
-  # calc silhouettes for all resolutions
-  calc_silhouettes <- function(resolution, assay = "integrated") {
-    col <- paste0(assay, "_snn_res.", resolution)
-    sil <- cluster::silhouette(
-      as.numeric(object@meta.data[, col]), 
-      cluster::daisy(object@reductions$pca@cell.embeddings[, dims])
-    )
-    return(sil[,3])
-  }
-  silhouettes <- map(resolutions, calc_silhouettes)
   
-  # choose resolution with highest mean silhouette width
-  best_width <- silhouettes %>% 
-    set_names(resolutions) %>%
-    map_dbl(., mean) %>%
-    sort(decreasing = TRUE) %>%
-    .[1] %>%
-    names()
+  while (TRUE) {
+    object <- FindClusters(object, resolution = resolutions, verbose = FALSE)
+    
+    # calc silhouettes for all resolutions
+    calc_silhouettes <- function(resolution, assay = "integrated") {
+      col <- paste0(assay, "_snn_res.", resolution)
+      sil <- cluster::silhouette(
+        as.numeric(object@meta.data[, col]), 
+        cluster::daisy(object@reductions$pca@cell.embeddings[, dims])
+      )
+      return(sil[,3])
+    }
+    silhouettes <- map(resolutions, calc_silhouettes)
+    
+    # choose resolution with highest mean silhouette width
+    best_width <- silhouettes %>% 
+      set_names(resolutions) %>%
+      map_dbl(., mean) %>%
+      sort(decreasing = TRUE) %>%
+      .[1] %>%
+      names()
+    
+    if (best_width != max(resolutions)) {
+      break()
+    }
+    resolutions <- seq(max(resolutions) + 0.2, max(resolutions) + 1, by = 0.2)
+  }
+  
   print(paste("Using resolution", best_width, "for clustering."))
   
   # assign clusters to active.ident slot
@@ -81,8 +93,7 @@ choose_resolution <- function(object, assay = "integrated") {
 }
 
 # - Cluster -------------------------------------------------------------------
-cluster <- function(object, assay = "integrated",
-                    resolutions = seq(0.4, 2, by = 0.2)) {
+cluster <- function(object, assay = "integrated") {
   if (assay == "integrated") {
     DefaultAssay(object) <- "integrated"
   } else {
@@ -91,8 +102,7 @@ cluster <- function(object, assay = "integrated",
   pcs <- object@reductions$pca@misc$sig_pcs
   # Find neighbors and cluster and different resolutions
   object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE)
-  object <- FindClusters(object, resolution = resolutions, verbose = FALSE)
-  object <- choose_resolution(object)
+  object <- choose_resolution(object, resolutions = seq(0.4, 2, by = 0.2))
   object <- RunUMAP(object, dims = 1:pcs, verbose = FALSE)
   return(object)
 }
