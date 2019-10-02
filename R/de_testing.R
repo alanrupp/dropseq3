@@ -439,8 +439,7 @@ deScore <- function(object, ident1, ident2) {
   } else {
     result <- FindConservedMarkers(object, ident.1 = ident1,
                                    ident.2 = ident2, grouping.var = "mouse")
-    result <- result %>% 
-      mutate(p_val_adj = metap::logitp(select(result, ends_with("p_val_adj"))))
+    result <- simplify_conserved_markers(result)
   }
   result <- mutate(result, p_val_adj = -log10(p_val_adj))
   result <- mutate(result, p_val_adj = ifelse(p_val_adj > 20, 20, p_val_adj))
