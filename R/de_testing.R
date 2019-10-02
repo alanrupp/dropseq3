@@ -116,7 +116,7 @@ find_expressed <- function(object, min_cells = 10, min_counts = 1) {
 }
 
 # - Cluster identity all cells -----------------------------------------------
-find_classes <- function(object, markers_df) {
+find_classes <- function(object, markers) {
   classes <- read_csv("~/Programs/dropseq3/data/celltype_markers.csv")
   classes <- classes %>% mutate("score" = str_count(paper, "\\,") + 1)
   
@@ -126,19 +126,25 @@ find_classes <- function(object, markers_df) {
   
   # find most likely class for each cluster
   find_class <- function(clstr) {
-    de_genes <- arrange(markers_df, desc(pct.1 - pct.2)) %>%
-      filter(cluster == clstr) %>% .$gene
+    # get list of DE genes from that cluster in descending order of enrichment
+    de_genes <- 
+      markers %>%
+      arrange(desc(pct.1 - pct.2)) %>%
+      filter(cluster == clstr) %>% 
+      .$gene
     
     # find cumulative score for each gene
     class_score <- function(class) {
       this_class <- filter(classes, cells == class)
       other_classes <- filter(classes, cells != class)
-      each_score <- map(de_genes, 
-                        ~ ifelse(.x %in% this_class$gene, 
-                                 filter(this_class, gene == .x)$score, 
-                                 ifelse(.x %in% other_classes$gene,
-                                        1-filter(other_classes, gene == .x)$score, 0)
-                        )
+      each_score <- 
+        map_dbl(de_genes, 
+            ~ ifelse(.x %in% this_class$gene,
+                     filter(this_class, gene == .x)$score, 
+                     ifelse(.x %in% other_classes$gene,
+                            1 - filter(other_classes, gene == .x)$score, 0
+                            )
+                     )
       ) %>% unlist()
       cumulative_score <- cumsum(each_score)
       if (max(cumulative_score) == 0) {
@@ -160,12 +166,12 @@ find_classes <- function(object, markers_df) {
   }
   
   # run for all clusters
-  results <- map(clusters, find_class) %>% unlist()
+  results <- map_chr(clusters, find_class)
   results <- data.frame("cluster" = clusters, "class" = results)
   
   # Find highest DE gene from hit class for each cluster
   classic_markers <- function(classes_df) {
-    markers_df <- arrange(markers_df, desc(pct.1 - pct.2))
+    markers_df <- arrange(markers, desc(pct.1 - pct.2))
     clusters <- unique(classes_df$cluster)
     
     classic_marker <- function(clstr) {
@@ -174,7 +180,7 @@ find_classes <- function(object, markers_df) {
         hit <- NA
       } else {
         marker_genes <- filter(classes, cells == class)$gene
-        hit <- filter(markers_df, cluster == clstr & gene %in% marker_genes)$gene[1]
+        hit <- filter(markers, cluster == clstr & gene %in% marker_genes)$gene[1]
       }
       return(hit)
     }
@@ -354,13 +360,13 @@ merge_markerless <- function(object, markers) {
 # - Find unique genes -------------------------------------------------------
 find_unique_genes <- function(object, genes = NULL, clusters = NULL,
                               top_n = 1) {
+  mtx <- object@assays$RNA@counts
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   }
   if (is.null(genes)) {
     genes <- rownames(mtx)
   }
-  mtx <- object@assays$RNA@counts
   
   cluster_expression <- function(mtx) {
     df <-
@@ -409,59 +415,75 @@ eigengene <- function(object, genes) {
   return(pca$x[,1])
 }
 
+# calculate "deScore" as in Tasic et al.
+deScore <- function(object, ident1, ident2) {
+  n_samples <- table(object@active.ident, object$mouse)
+  n_samples <- as.data.frame(n_samples) %>% filter(Var1 %in% c(ident1, ident2))
+  if (sum(n_samples$Freq < 3) > 0) {
+    result <- FindMarkers(object, ident.1 = ident1, ident.2 = ident2)
+  } else {
+    result <- FindConservedMarkers(object, ident.1 = ident1,
+                                   ident.2 = ident2, grouping.var = "mouse")
+  }
+  result <- mutate(result, p_val_adj = -log10(p_val_adj))
+  result <- mutate(result, p_val_adj = ifelse(p_val_adj > 20, 20, p_val_adj))
+  result <- sum(result$p_val_adj)
+  return(result)
+}
 
 # - Merging clusters --------------------------------------------------------
 # merge clusters according to the Tasic et al Nature 2018 criteria 
 merge_clusters <- function(object) {
-  # find 2 neighbors for each cluster based on Euclidean distance in UMAP
-  cluster_centers <- 
-    data.frame("UMAP1" = object@reductions$umap@cell.embeddings[,1],
-               "UMAP2" = object@reductions$umap@cell.embeddings[,2],
-               "cluster" = object@active.ident) %>%
-    group_by(cluster) %>%
-    summarize(UMAP1 = median(UMAP1), UMAP2 = median(UMAP2)) %>%
-    as.data.frame() %>%
-    column_to_rownames("cluster")
-  dists <- 
-    dist(cluster_centers) %>%
-    as.matrix() %>%
-    as.data.frame() %>%
-    rownames_to_column("cluster") %>%
-    gather(-cluster, key = "other", value = "dist")
-  dists <- filter(dists, dist != 0)
-  find_neighbors <- function(clstr) {
-    dists <- filter(dists, cluster == clstr)
-    dists <- arrange(dists, dist)
-    dists <- slice(dists, 1:2)
-    return(dists$other)
+  while (TRUE) {
+    # find 2 neighbors for each cluster based on Euclidean distance in UMAP
+    cluster_centers <- 
+      data.frame("UMAP1" = object@reductions$umap@cell.embeddings[,1],
+                 "UMAP2" = object@reductions$umap@cell.embeddings[,2],
+                 "cluster" = object@active.ident) %>%
+      group_by(cluster) %>%
+      summarize(UMAP1 = median(UMAP1), UMAP2 = median(UMAP2)) %>%
+      as.data.frame() %>%
+      column_to_rownames("cluster")
+    dists <- 
+      dist(cluster_centers) %>%
+      as.matrix() %>%
+      as.data.frame() %>%
+      rownames_to_column("cluster") %>%
+      gather(-cluster, key = "other", value = "dist")
+    dists <- filter(dists, dist != 0)
+    find_neighbors <- function(clstr) {
+      dists <- filter(dists, cluster == clstr)
+      dists <- arrange(dists, dist)
+      dists <- slice(dists, 1:2)
+      return(dists$other)
+    }
+    neighbors <- map(unique(dists$cluster), find_neighbors)
+    neighbors <- unlist(neighbors)
+    neighbors <- data.frame("cluster" = rep(unique(dists$cluster), each = 2),
+                            "neighbor" = neighbors)
+    
   }
-  neighbors <- map(unique(dists$cluster), find_neighbors)
-  neighbors <- unlist(neighbors)
-  neighbors <- data.frame("cluster" = rep(unique(dists$cluster), each = 2),
-                          "neighbor" = neighbors)
   
-  # calculate "deScore"
-  deScore <- function(ident1, ident2) {
-    result <- FindMarkers(object, ident.1 = ident1, ident.2 = ident2)
-    result <- mutate(result, p_val_adj = -log10(p_val_adj))
-    result <- mutate(result, p_val_adj = ifelse(p_val_adj > 20, 20, p_val_adj))
-    result <- sum(result$p_val_adj)
-    return(result)
-  }
+  
   neighbors$deScore <- apply(neighbors, 1, function(x) deScore(x[1], x[2]))
+  neighbors <- neighbors %>% mutate(
+    cluster = factor(cluster, levels = levels(object@active.ident)),
+    neighbor = factor(neighbor, levels = levels(object@active.ident))
+  )
   
   # merge clusters with deScore < 150
   to_merge <- filter(neighbors, deScore < 150)
   if (nrow(to_merge) == 0) {
-    cat("No clusters to merge")
+    print("No clusters to merge")
   } else {
     for (i in 1:nrow(to_merge)) {
-      cat(paste("Merging clusters", to_merge[i, "cluster"], "and",
+      print(paste("Merging clusters", to_merge[i, "cluster"], "and",
                 to_merge[i, "neighbor"]))
       object@active.ident[object@active.ident == to_merge[i, "neighbor"]] <-
         to_merge[i, "cluster"]
     }
   }
+  levels(object@active.ident) <- sort(unique(object@active.ident))
   return(object)
 }
 
