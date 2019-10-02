@@ -103,7 +103,46 @@ cluster <- function(object, assay = "integrated") {
   # Find neighbors and cluster and different resolutions
   object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE)
   object <- choose_resolution(object, resolutions = seq(0.4, 2, by = 0.2))
-  object <- RunUMAP(object, dims = 1:pcs, verbose = FALSE)
+  return(object)
+}
+
+# - Optimize UMAP ------------------------------------------------------------
+optimize_umap <- function(object) {
+  pcs <- object@reductions$pca@misc$sig_pcs
+  mtx <- object@reductions$pca@cell.embeddings[,1:pcs]
+  neighbors <- seq(5, 50, by = 5)
+  dists <- c(0.001, 0.005, 0.01, 0.05, 0.1, 0.5)
+  search_grid <- expand.grid(neighbors, dists)
+  search_grid <- search_grid[1:3, ]
+  # get UMAP coordinates
+  get_coordinates <- function(neighbors, distance) {
+    as.data.frame(uwot::umap(mtx, n_neighbors = neighbors, min_dist = distance))
+  }
+  results <- map(1:nrow(search_grid), 
+                 ~ get_coordinates(search_grid[.x, ]$Var1, search_grid[.x, ]$Var2))
+  # calculate silhouette width for each coordinate state
+  calc_silhouettes <- function(result) {
+    sil <- cluster::silhouette(as.numeric(object@active.ident),
+                               cluster::daisy(result)
+    )
+    return(mean(sil[,3]))
+  }
+  silhouettes <- map_dbl(results, calc_silhouettes)
+  search_grid$mean_silhouette <- silhouettes
+  search_grid <- rename(search_grid,
+                        "n_neighbors" = Var1,
+                        "min_dist" = Var2)
+  search_grid <- arrange(search_grid, desc(mean_silhouette))
+  return(search_grid)
+}
+
+# - Run UMAP ------------------------------------------------------------------
+run_umap <- function(object) {
+  parameters <- optimize_umap(object) %>% slice(1) %>% as.data.frame()
+  object <- RunUMAP(object, 
+                    n.neighbors = parameters$n_neighbors,
+                    min.dist = parameters$min.dist,
+                    verbose = FALSE)
   return(object)
 }
 
@@ -435,10 +474,12 @@ deScore <- function(object, ident1, ident2) {
   n_samples <- table(object@active.ident, object$mouse)
   n_samples <- as.data.frame(n_samples) %>% filter(Var1 %in% c(ident1, ident2))
   if (sum(n_samples$Freq < 3) > 0) {
-    result <- FindMarkers(object, ident.1 = ident1, ident.2 = ident2)
+    result <- FindMarkers(object, ident.1 = ident1, ident.2 = ident2,
+                          verbose = FALSE)
   } else {
     result <- FindConservedMarkers(object, ident.1 = ident1,
-                                   ident.2 = ident2, grouping.var = "mouse")
+                                   ident.2 = ident2, grouping.var = "mouse",
+                                   verbose = FALSE)
     result <- simplify_conserved_markers(result)
   }
   result <- mutate(result, p_val_adj = -log10(p_val_adj))
@@ -451,7 +492,8 @@ deScore <- function(object, ident1, ident2) {
 # merge clusters according to the Tasic et al Nature 2018 criteria 
 merge_clusters <- function(object) {
   while (TRUE) {
-    # find 2 neighbors for each cluster based on Euclidean distance in UMAP
+    # find 2 neighbors based on Euclidean distance of mean expression
+    means <- cluster_means(object, genes = genes)
     cluster_centers <- 
       data.frame("UMAP1" = object@reductions$umap@cell.embeddings[,1],
                  "UMAP2" = object@reductions$umap@cell.embeddings[,2],
@@ -491,12 +533,11 @@ merge_clusters <- function(object) {
       break()
     } else {
       # merge 2 most similar clusters
-      to_merge <- slice(neighbors, 1)
-      print(paste("Merging clusters", to_merge[1, "cluster"], "and",
-                  to_merge[1, "neighbor"]))
-      object@active.ident[object@active.ident == to_merge[1, "neighbor"]] <-
-        to_merge[1, "cluster"]
-      levels(object@active.ident) <- sort(unique(object@active.ident))
+      to_merge <- slice(neighbors, 1) %>% as.data.frame()
+      print(paste("Merging clusters", to_merge$cluster, "and", to_merge$neighbor,
+                  "| deScore:", as.integer(to_merge$deScore)))
+      object@active.ident[object@active.ident == to_merge$neighbor] <-
+        to_merge$cluster
     }
   }
   return(object)
