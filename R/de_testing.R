@@ -268,27 +268,7 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
   markers <- bind_rows(markers)
   
   # run logitp function from metap package to combine p values
-  combine_p <- function(markers) {
-    p_vals <- select(markers, ends_with("p_val_adj"))
-    p_vals <- as.data.frame(p_vals)
-    # convert any 1 to 1-10^-9
-    p_vals <- sapply(p_vals, function(x) ifelse(x == 1, 1-10^-6, x))
-    p_vals <- apply(p_vals, 1, function(x) metap::logitp(x)$p)
-    return(p_vals)
-  }
-  p_vals <- combine_p(markers)
-  
-  # calculate pct cells expressing gene and fold change
-  pct1 <- rowMeans(select(markers, ends_with("pct.1")))
-  pct2 <- rowMeans(select(markers, ends_with("pct.2")))
-  fc <- rowMeans(select(markers, ends_with("avg_logFC")))
-  
-  # select only relevant columns
-  markers <- select(markers, cluster, gene) %>%
-    mutate("avg_logFC" = fc,
-           "pct.1" = pct1,
-           "pct.2" = pct2,
-           "p_val_adj" = p_vals)
+  markers <- simplify_conserved_markers(markers)
   
   # add standard FindMarkers results
   if (length(too_few) > 0) {
