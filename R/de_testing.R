@@ -191,6 +191,41 @@ find_classes <- function(object, markers) {
   return(results)
 }
 
+simplify_conserved_markers <- function(markers) {
+  if (!"gene" %in% colnames(markers)) {
+    markers <- rownames_to_column(markers, "gene")
+  }
+  
+  # run logitp function from metap package to combine p values
+  combine_p <- function(markers) {
+    p_vals <- select(markers, ends_with("p_val_adj"))
+    p_vals <- as.data.frame(p_vals)
+    # convert any 1 to 1-10^-9
+    p_vals <- sapply(p_vals, function(x) ifelse(x == 1, 1-10^-6, x))
+    p_vals <- apply(p_vals, 1, function(x) metap::logitp(x)$p)
+    return(p_vals)
+  }
+  p_vals <- combine_p(markers)
+  
+  # calculate pct cells expressing gene and fold change
+  pct1 <- rowMeans(select(markers, ends_with("pct.1")))
+  pct2 <- rowMeans(select(markers, ends_with("pct.2")))
+  fc <- rowMeans(select(markers, ends_with("avg_logFC")))
+  
+  # select only relevant columns
+  if ("cluster" %in% colnames(markers)) {
+    markers <- select(markers, cluster, gene)
+  } else {
+    markers <- select(markers, gene)
+  }
+  markers <- markers %>% mutate(
+    "avg_logFC" = fc,
+    "pct.1" = pct1,
+    "pct.2" = pct2,
+    "p_val_adj" = p_vals)
+  return(markers)
+}
+
 # - Find all conserved markers -----------------------------------------------
 FindAllConservedMarkers <- function(object, ident2 = NULL, 
                                     groupby = NULL, clusters = NULL,
@@ -424,6 +459,8 @@ deScore <- function(object, ident1, ident2) {
   } else {
     result <- FindConservedMarkers(object, ident.1 = ident1,
                                    ident.2 = ident2, grouping.var = "mouse")
+    result <- result %>% 
+      mutate(p_val_adj = metap::logitp(select(result, ends_with("p_val_adj"))))
   }
   result <- mutate(result, p_val_adj = -log10(p_val_adj))
   result <- mutate(result, p_val_adj = ifelse(p_val_adj > 20, 20, p_val_adj))
@@ -462,28 +499,27 @@ merge_clusters <- function(object) {
     neighbors <- data.frame("cluster" = rep(unique(dists$cluster), each = 2),
                             "neighbor" = neighbors)
     
-  }
-  
-  
-  neighbors$deScore <- apply(neighbors, 1, function(x) deScore(x[1], x[2]))
-  neighbors <- neighbors %>% mutate(
-    cluster = factor(cluster, levels = levels(object@active.ident)),
-    neighbor = factor(neighbor, levels = levels(object@active.ident))
-  )
-  
-  # merge clusters with deScore < 150
-  to_merge <- filter(neighbors, deScore < 150)
-  if (nrow(to_merge) == 0) {
-    print("No clusters to merge")
-  } else {
-    for (i in 1:nrow(to_merge)) {
-      print(paste("Merging clusters", to_merge[i, "cluster"], "and",
-                to_merge[i, "neighbor"]))
-      object@active.ident[object@active.ident == to_merge[i, "neighbor"]] <-
-        to_merge[i, "cluster"]
+    # calculate deScore for all neighbors and merge most similar
+    neighbors$deScore <- apply(neighbors, 1, 
+                               function(x) deScore(object, x[1], x[2]))
+    neighbors <- arrange(neighbors, deScore)
+    neighbors <- neighbors %>% mutate(
+      cluster = factor(cluster, levels = levels(object@active.ident)),
+      neighbor = factor(neighbor, levels = levels(object@active.ident))
+    )
+    
+    if (sum(neighbors$deScore < 150) == 0) {
+      break()
+    } else {
+      # merge 2 most similar clusters
+      to_merge <- slice(neighbors, 1)
+      print(paste("Merging clusters", to_merge[1, "cluster"], "and",
+                  to_merge[1, "neighbor"]))
+      object@active.ident[object@active.ident == to_merge[1, "neighbor"]] <-
+        to_merge[1, "cluster"]
+      levels(object@active.ident) <- sort(unique(object@active.ident))
     }
   }
-  levels(object@active.ident) <- sort(unique(object@active.ident))
   return(object)
 }
 
