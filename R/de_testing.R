@@ -107,41 +107,59 @@ cluster <- function(object, assay = "integrated") {
 }
 
 # - Optimize UMAP ------------------------------------------------------------
-optimize_umap <- function(object) {
+optimize_umap <- function(object, method = "dunn") {
   pcs <- object@reductions$pca@misc$sig_pcs
   mtx <- object@reductions$pca@cell.embeddings[,1:pcs]
   neighbors <- seq(5, 50, by = 5)
   dists <- c(0.001, 0.005, 0.01, 0.05, 0.1, 0.5)
   search_grid <- expand.grid(neighbors, dists)
-  search_grid <- search_grid[1:3, ]
   # get UMAP coordinates
   get_coordinates <- function(neighbors, distance) {
     as.data.frame(uwot::umap(mtx, n_neighbors = neighbors, min_dist = distance))
   }
   results <- map(1:nrow(search_grid), 
                  ~ get_coordinates(search_grid[.x, ]$Var1, search_grid[.x, ]$Var2))
-  # calculate silhouette width for each coordinate state
-  calc_silhouettes <- function(result) {
-    sil <- cluster::silhouette(as.numeric(object@active.ident),
-                               cluster::daisy(result)
-    )
-    return(mean(sil[,3]))
+  
+  if (method == "dunn") {
+    # calculate Dunn index for compactness of clusters
+    dunn_index <- function(result) {
+      distances <- dist(result) %>% as.matrix()
+      clusters <- unique(object@active.ident)
+      get_min <- function(cluster) {
+        min(distances[object@active.ident == cluster, object@active.ident != cluster])
+      }
+      get_max <- function(cluster) {
+        max(distances[object@active.ident == cluster, object@active.ident == cluster])
+      }
+      result <- map_dbl(clusters, ~ get_min(.x) / get_max(.x))
+      return(mean(result))
+      }
+    scores <- map_dbl(results, dunn_index)
+    } else if (method == "silhouette") {
+    # calculate silhouette width for each coordinate state
+    calc_silhouettes <- function(result) {
+      sil <- cluster::silhouette(as.numeric(object@active.ident),
+                                 cluster::daisy(result)
+      )
+      return(mean(sil[, 3]))
+    }
+    scores <- map_dbl(results, calc_silhouettes)
   }
-  silhouettes <- map_dbl(results, calc_silhouettes)
-  search_grid$mean_silhouette <- silhouettes
+  search_grid$mean_scores <- scores
   search_grid <- rename(search_grid,
                         "n_neighbors" = Var1,
                         "min_dist" = Var2)
-  search_grid <- arrange(search_grid, desc(mean_silhouette))
+  search_grid <- arrange(search_grid, desc(mean_scores))
   return(search_grid)
 }
 
 # - Run UMAP ------------------------------------------------------------------
 run_umap <- function(object) {
-  parameters <- optimize_umap(object) %>% slice(1) %>% as.data.frame()
+  parameters <- optimize_umap(object)
   object <- RunUMAP(object, 
-                    n.neighbors = parameters$n_neighbors,
-                    min.dist = parameters$min.dist,
+                    dims = 1:object@reductions$pca@misc$sig_pcs,
+                    n.neighbors = parameters[1, ]$n_neighbors,
+                    min.dist = parameters[1, ]$min_dist,
                     verbose = FALSE)
   return(object)
 }
@@ -230,6 +248,7 @@ find_classes <- function(object, markers) {
   return(results)
 }
 
+# - Simplify conserved markers -----------------------------------------------
 simplify_conserved_markers <- function(markers) {
   if (!"gene" %in% colnames(markers)) {
     markers <- rownames_to_column(markers, "gene")
@@ -340,7 +359,7 @@ summarize_markers <- function(markers) {
 
 
 # - Merge markerless --------------------------------------------------------
-# merge markerless clusters with nearest UMAP neighbor
+# merge markerless clusters with nearest cluster by correlation
 merge_markerless <- function(object, markers) {
   marker_summary <- summarize_markers(markers)
   markerless <- filter(marker_summary, total == 0)$cluster
@@ -348,59 +367,62 @@ merge_markerless <- function(object, markers) {
   # print clusters that don't have markers
   if (length(markerless) >= 1) {
     print(paste("Cluster(s)", paste(markerless, collapse = ", "), 
-              "have no significantly enriched genes. Merging with neighbors or dropping. ")
+                "have no significantly enriched genes. Merging with neighbors or dropping. ")
     )
   } else {
     return(object)
   }
   
-  # find umap neighbor
-  cluster_neighbors <- function(object) {
-    data.frame(
-    "cluster" = object@active.ident,
-    "UMAP1" = object@reductions$umap@cell.embeddings[, 1],
-    "UMAP2" = object@reductions$umap@cell.embeddings[, 2]
-  ) %>%
-    group_by(cluster) %>%
-    summarize(UMAP1 = median(UMAP1), UMAP2 = median(UMAP2)) %>%
-    as.data.frame() %>%
-    column_to_rownames("cluster") %>%
-    dist %>%
-    as.matrix() %>%
+  # merge markerless clusters with nearest neighbor
+  clusters <- unique(object@active.ident)
+  mean_pcs <- map(clusters,
+                  ~ colMeans(object@reductions$pca@cell.embeddings[
+                    names(object@active.ident)[object@active.ident == .x],
+                    1:object@reductions$pca@misc$sig_pcs
+                    ])) %>%
+    bind_cols() %>%
+    set_names(clusters) %>%
+    as.data.frame()
+  neighbors <- cor(mean_pcs) %>%
     as.data.frame() %>%
     rownames_to_column("cluster") %>%
-    gather(-cluster, key = "other", value = "dist") %>%
-    filter(dist != 0) %>%
+    gather(-cluster, key = "neighbor", value = "corr") %>%
+    filter(cluster != neighbor) %>%
     group_by(cluster) %>%
-    filter(dist == min(dist))
-  }
-  neighbors <- cluster_neighbors(object)
-  neighbors <- neighbors %>% ungroup() %>% mutate(
+    arrange(desc(corr)) %>%
+    slice(1) %>%
+    ungroup()
+  
+  neighbors <- neighbors %>% mutate(
     "cluster" = factor(cluster, levels = levels(object@active.ident)),
-    "other" = factor(other, levels = levels(object@active.ident))
+    "neighbor" = factor(neighbor, levels = levels(object@active.ident))
   )
   markerless_neighbors <- filter(neighbors, cluster %in% markerless)
 
   # merge or drop cells based on distance to nearest neighbor
-  merge_cells <- function(cluster, other) {
-    print(paste("Cluster", cluster, "and cluster", other,
+  merge_cells <- function(cluster, neighbor) {
+    print(paste("Cluster", cluster, "and cluster", neighbor,
               "are UMAP neighbors.",
-              "Merging cluster", cluster, "into cluster", other, '.'))
-    object@active.ident[object@active.ident == cluster] <- other
+              "Merging cluster", cluster, "into cluster", neighbor, '.'))
+    object@active.ident[object@active.ident == cluster] <- neighbor
     return(object)
   }
   drop_cells <- function(cluster) {
     print(paste("Dropping cluster", cluster, "because it has no clear other",
               "cluster to merge into."))
-    object <- SubsetData(object, ident.remove = cluster)
+    object <- subset(
+      object, cells = names(object@active.ident)[object@active.ident != cluster]
+      )
     return(object)
   }
-  mean_dist <- mean(neighbors$dist)
+  mean_corr <- mean(neighbors$corr)
+  print(as.data.frame(neighbors))
+  print(mean_corr)
   for (i in 1:nrow(markerless_neighbors)) {
     # if both umap and corr are the same, merge clusters
-    if (markerless_neighbors[i, "dist"] < mean_dist) {
+    if (markerless_neighbors[i, ]$corr < mean_corr) {
       object <- merge_cells(markerless_neighbors[i, ]$cluster, 
-                            markerless_neighbors[i, ]$other)
+                            markerless_neighbors[i, ]$neighbor)
     } else {
       object <- drop_cells(markerless_neighbors[i, ]$cluster)
     }
@@ -469,7 +491,8 @@ eigengene <- function(object, genes) {
   return(pca$x[,1])
 }
 
-# calculate "deScore" as in Tasic et al.
+# - deScore -------------------------------------------------------------------
+# calculate "deScore" as in Tasic et al. 2018
 deScore <- function(object, ident1, ident2) {
   n_samples <- table(object@active.ident, object$mouse)
   n_samples <- as.data.frame(n_samples) %>% filter(Var1 %in% c(ident1, ident2))
@@ -488,54 +511,62 @@ deScore <- function(object, ident1, ident2) {
   return(result)
 }
 
+# - DE genes ------------------------------------------------------------------
+# calculate total DE genes between 2 clusters
+de_genes <- function(object, ident1, ident2) {
+  n_samples <- table(object@active.ident, object$mouse)
+  n_samples <- as.data.frame(n_samples) %>% filter(Var1 %in% c(ident1, ident2))
+  if (sum(n_samples$Freq < 3) > 0) {
+    result <- FindMarkers(object, ident.1 = ident1, ident.2 = ident2,
+                          verbose = FALSE)
+  } else {
+    result <- FindConservedMarkers(object, ident.1 = ident1,
+                                   ident.2 = ident2, grouping.var = "mouse",
+                                   verbose = FALSE)
+    result <- simplify_conserved_markers(result)
+  }
+  return(sum(result$p_val_adj < 0.05, na.rm = TRUE))
+}
+
 # - Merging clusters --------------------------------------------------------
-# merge clusters according to the Tasic et al Nature 2018 criteria 
 merge_clusters <- function(object) {
   while (TRUE) {
-    # find 2 neighbors based on Euclidean distance of mean expression
-    means <- cluster_means(object, genes = genes)
-    cluster_centers <- 
-      data.frame("UMAP1" = object@reductions$umap@cell.embeddings[,1],
-                 "UMAP2" = object@reductions$umap@cell.embeddings[,2],
-                 "cluster" = object@active.ident) %>%
-      group_by(cluster) %>%
-      summarize(UMAP1 = median(UMAP1), UMAP2 = median(UMAP2)) %>%
-      as.data.frame() %>%
-      column_to_rownames("cluster")
-    dists <- 
-      dist(cluster_centers) %>%
-      as.matrix() %>%
+    # find 2 neighbors for every cluster based correlation of PCs
+    clusters <- unique(object@active.ident)
+    mean_pcs <- map(clusters,
+                    ~ colMeans(object@reductions$pca@cell.embeddings[
+                      names(object@active.ident)[object@active.ident == .x],
+                      1:object@reductions$pca@misc$sig_pcs
+                    ])) %>%
+      bind_cols() %>%
+      set_names(clusters) %>%
+      as.data.frame()
+    neighbors <- cor(mean_pcs) %>%
       as.data.frame() %>%
       rownames_to_column("cluster") %>%
-      gather(-cluster, key = "other", value = "dist")
-    dists <- filter(dists, dist != 0)
-    find_neighbors <- function(clstr) {
-      dists <- filter(dists, cluster == clstr)
-      dists <- arrange(dists, dist)
-      dists <- slice(dists, 1:2)
-      return(dists$other)
-    }
-    neighbors <- map(unique(dists$cluster), find_neighbors)
-    neighbors <- unlist(neighbors)
-    neighbors <- data.frame("cluster" = rep(unique(dists$cluster), each = 2),
-                            "neighbor" = neighbors)
+      gather(-cluster, key = "neighbor", value = "corr") %>%
+      filter(cluster != neighbor) %>%
+      group_by(cluster) %>%
+      arrange(desc(corr)) %>%
+      slice(1:2) %>%
+      ungroup()
     
     # calculate deScore for all neighbors and merge most similar
     neighbors$deScore <- apply(neighbors, 1, 
-                               function(x) deScore(object, x[1], x[2]))
+                               function(x) de_genes(object, x[1], x[2]))
     neighbors <- arrange(neighbors, deScore)
     neighbors <- neighbors %>% mutate(
       cluster = factor(cluster, levels = levels(object@active.ident)),
       neighbor = factor(neighbor, levels = levels(object@active.ident))
     )
     
-    if (sum(neighbors$deScore < 150) == 0) {
+    if (sum(neighbors$deScore < 10) == 0) {
       break()
     } else {
       # merge 2 most similar clusters
       to_merge <- slice(neighbors, 1) %>% as.data.frame()
       print(paste("Merging clusters", to_merge$cluster, "and", to_merge$neighbor,
-                  "| deScore:", as.integer(to_merge$deScore)))
+                  "| de genes:", as.integer(to_merge$deScore)))
       object@active.ident[object@active.ident == to_merge$neighbor] <-
         to_merge$cluster
     }
