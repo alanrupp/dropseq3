@@ -16,6 +16,8 @@ cluster_means <- function(object, genes = NULL, assay = "RNA",
   mtx <- slot(slot(object, "assays")[[assay]], data_slot)
   if (is.null(genes)) {
     genes <- rownames(mtx)
+  } else {
+    genes <- genes[genes %in% rownames(object@assays$RNA@data)]
   }
   df <-
     map(clusters,
@@ -287,7 +289,7 @@ simplify_conserved_markers <- function(markers) {
 # - Find all conserved markers -----------------------------------------------
 FindAllConservedMarkers <- function(object, ident2 = NULL, 
                                     groupby = NULL, clusters = NULL,
-                                    verbose = TRUE) {
+                                    verbose = FALSE) {
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   }
@@ -402,7 +404,7 @@ merge_markerless <- function(object, markers) {
   # merge or drop cells based on distance to nearest neighbor
   merge_cells <- function(cluster, neighbor) {
     print(paste("Cluster", cluster, "and cluster", neighbor,
-              "are UMAP neighbors.",
+              "are neighbors.",
               "Merging cluster", cluster, "into cluster", neighbor, '.'))
     object@active.ident[object@active.ident == cluster] <- neighbor
     return(object)
@@ -416,11 +418,9 @@ merge_markerless <- function(object, markers) {
     return(object)
   }
   mean_corr <- mean(neighbors$corr)
-  print(as.data.frame(neighbors))
-  print(mean_corr)
   for (i in 1:nrow(markerless_neighbors)) {
     # if both umap and corr are the same, merge clusters
-    if (markerless_neighbors[i, ]$corr < mean_corr) {
+    if (markerless_neighbors[i, ]$corr > mean_corr) {
       object <- merge_cells(markerless_neighbors[i, ]$cluster, 
                             markerless_neighbors[i, ]$neighbor)
     } else {
@@ -529,7 +529,7 @@ de_genes <- function(object, ident1, ident2) {
 }
 
 # - Merging clusters --------------------------------------------------------
-merge_clusters <- function(object) {
+merge_clusters <- function(object, markers) {
   while (TRUE) {
     # find 2 neighbors for every cluster based correlation of PCs
     clusters <- unique(object@active.ident)
@@ -673,4 +673,47 @@ edgeR_test <- function(mtx, metadata, treatment) {
   result <- map(seq(length(result)),
                 ~ mutate(result[[.x]], "cluster" = names(result)[.x]))
   result <- bind_rows(result)
+}
+
+# - Grab clusters by type ------------------------------------------------------
+grab_type <- function(object, classes, type = "Neuron") {
+  # construct a tree based on marker genes for that cell type
+  class_genes <- read_csv("~/Programs/dropseq3/data/celltype_markers.csv")
+  means <- cluster_means(object, genes = class_genes$gene)
+  tree <- hclust(dist(t(means)))
+  
+  # cut the tree at different levels and choose cut based on Youden's J
+  youden <- function(cut) {
+    new_clusters <- cutree(tree, cut)
+    confusion <- table(new_clusters, classes$class == type) %>% as.data.frame()
+    real_type <- confusion %>%
+      filter(Var2 == TRUE) %>%
+      filter(Freq == max(Freq)) %>%
+      slice(1) %>%
+      .$new_clusters
+    tp <- confusion %>% filter(new_clusters == real_type & Var2 == TRUE) %>%
+      .$Freq
+    tn <- confusion %>% filter(new_clusters != real_type & Var2 == TRUE) %>%
+      .$Freq %>% sum()
+    fn <- confusion %>% filter(new_clusters != real_type & Var2 == FALSE) %>%
+      .$Freq %>% sum()
+    fp <- confusion %>% filter(new_clusters == real_type & Var2 == FALSE) %>%
+      .$Freq
+    j <- (tp/(tp+fn)) + (tn/(tn+fp)) - 1
+    result[i-1, 1] <- i
+    result[i-1, 2] <- j
+  }
+  js <- map_dbl(2:ncol(means), youden)
+  names(js) <- 2:ncol(means)
+  cut_to_use <- names(js)[js == max(js)][1]
+  
+  # return cluster IDs associated with that cut
+  new_clusters <- cutree(tree, cut_to_use)
+  confusion <- table(new_clusters, classes$class == type) %>% as.data.frame()
+  real_type <- confusion %>%
+    filter(Var2 == TRUE) %>%
+    filter(Freq == max(Freq)) %>%
+    slice(1) %>%
+    .$new_clusters
+  return(names(new_clusters)[new_clusters == real_type])
 }
