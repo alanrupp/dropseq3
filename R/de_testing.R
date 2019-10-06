@@ -700,8 +700,7 @@ grab_type <- function(object, classes, type = "Neuron") {
     fp <- confusion %>% filter(new_clusters == real_type & Var2 == FALSE) %>%
       .$Freq
     j <- (tp/(tp+fn)) + (tn/(tn+fp)) - 1
-    result[i-1, 1] <- i
-    result[i-1, 2] <- j
+    return(j)
   }
   js <- map_dbl(2:ncol(means), youden)
   names(js) <- 2:ncol(means)
