@@ -1,3 +1,5 @@
+library(reticulate)
+
 # -- Matrix functions ---------------------------------------------------------
 # keep genes that are in all matrices
 keep_shared_genes <- function(mtx_list) {
@@ -104,4 +106,15 @@ scrublet <- function(mtx) {
   expected_doublet_rate <- find_expected_doublet_rate(mtx)
   doublets <- score_doublets(mtx, expected_doublet_rate)
   return(doublets)
+}
+
+
+# - Integrate data ------------------------------------------------------------
+integrate_data <- function(object) {
+  print("Integrating data")
+  k <- min(200, min(sapply(object, ncol)))
+  anchors <- FindIntegrationAnchors(object, k.filter = k, verbose = FALSE)
+  object <- IntegrateData(anchors, verbose = FALSE)
+  DefaultAssay(object) <- "integrated"
+  return(object)
 }
