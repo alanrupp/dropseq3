@@ -120,7 +120,8 @@ heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
                          heatmap_legend = FALSE,
                          cut_clusters = 1,
                          cut_genes = 1,
-                         order_genes = FALSE) {
+                         order_genes = FALSE,
+                         title = NA) {
   # filter cells
   if (is.null(cells)) {
     cells <- colnames(object@assays$RNA@data)
@@ -187,7 +188,8 @@ heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
                          legend = heatmap_legend,
                          color = color_pal,
                          cutree_rows = cut_clusters,
-                         cluster_cols = FALSE)
+                         cluster_cols = FALSE,
+                         main = title)
   } else {
     plt <-
       pheatmap::pheatmap(mean_values, 
@@ -197,11 +199,22 @@ heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
                          legend = heatmap_legend,
                          color = color_pal,
                          cutree_cols = cut_genes,
-                         cutree_rows = cut_clusters)
+                         cutree_rows = cut_clusters,
+                         main = title)
   }
   return(plt)
 }
 
+# - Clip matrix at upper limit ------------------------------------------------
+clip_matrix <- function(matrix, limit) {
+  cols <- colnames(matrix); rows <- rownames(matrix)
+  clip_fun <- function(x) {
+    ifelse(x > limit, limit, ifelse(x < -limit, -limit, x))
+  }
+  matrix <- structure(vapply(matrix, clip_fun, numeric(1)), dim = dim(matrix))
+  colnames(matrix) <- cols; rownames(matrix) <- rows
+  return(matrix)
+}
 
 # - Heatmap block -------------------------------------------------------------
 heatmap_block <- function(object,
@@ -212,7 +225,8 @@ heatmap_block <- function(object,
                           scale = TRUE,
                           label_genes = TRUE, 
                           maxmin = NULL,
-                          integrated = FALSE) {
+                          integrated = FALSE,
+                          legend = FALSE) {
   
   # 
   if (ncol(object@assays$RNA@data) < n_cells) {
@@ -221,10 +235,10 @@ heatmap_block <- function(object,
   
   # grab relevant clusters
   if (is.null(clusters)) {
-    clusters <- sort(unique(object@active.ident))
+    clusters <- levels(object@active.ident)
     cells <- names(object@active.ident)[object@active.ident %in% clusters]
     cells <- sample(cells, n_cells)
-    idents <- object@active.ident[cells]
+    idents <- sort(object@active.ident[cells])
     idents <- sort(idents)
     cells <- names(idents)
   } else {
@@ -240,34 +254,15 @@ heatmap_block <- function(object,
   if (is.null(genes)) {
     genes <- object@assays$integrated@var.features
   } 
-  genes <- genes[genes %in% rownames(object@assays$RNA@data)]
   
-  if (scale == TRUE) {
+  if (scale) {
     matrix <- object@assays$RNA@scale.data[genes, cells]
   } else {
     matrix <- object@assays$RNA@data[genes, cells]
   }
   
-  # auto clip high and low to center at 0
-  auto_clip <- function(mtx, clip) {
-    if (is.null(clip)) {
-      values <- as.matrix(mtx)
-      if (abs(min(values)) < max(values)) {
-        clip <- abs(min(values))
-        mtx <- apply(mtx, c(1,2), function(x) ifelse(x > clip, clip, x))
-      } else if (abs(min(values)) > max(values)) {
-        clip <- max(values)
-        mtx <- apply(mtx, c(1,2), function(x) ifelse(x < -clip, -clip, x))
-      }
-    } else {
-      mtx <- apply(mtx, c(1,2), function(x) ifelse(x < -clip, -clip, 
-                                                   ifelse(x > clip, clip, x)))
-    }
-    return(mtx)
-  }
-  
-  if (scale == TRUE) {
-    matrix <- auto_clip(matrix, maxmin)
+  if (!is.null(maxmin) & scale) {
+    matrix <- clip_matrix(matrix, maxmin)
   }
   
   # make matrix into tidy df
@@ -303,8 +298,8 @@ heatmap_block <- function(object,
   # plot axis labels
   label_plt <- 
     ggplot(label_text, aes(x = pos, y = 0)) +
-    geom_text_repel(aes(label = cluster), ylim = c(-Inf, 0),
-                    direction = "y") +
+    geom_text_repel(aes(label = cluster), ylim = c(-Inf, 0), direction = "y",
+                    hjust = 0.5) +
     theme_void() +
     scale_x_continuous(expand = c(0, 0), limits = c(1, max(label_text$pos))) +
     scale_y_continuous(expand = c(0, 0), limits = c(-100, 1)) +
@@ -525,7 +520,7 @@ umap_plot <- function(object, genes, cells = NULL, clusters = NULL,
   # standardize fill
   results <- results %>%
     group_by(gene) %>%
-    mutate(value = value / mean(value)) %>%
+    mutate(value = value / max(value)) %>%
     ungroup()
   
   # plot
