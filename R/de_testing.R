@@ -57,17 +57,19 @@ choose_resolution <- function(object, resolutions = NULL,
                               assay = "integrated") {
   dims <- 1:object@reductions$pca@misc$sig_pcs
   
-  # run through all clusters, finding mean silhouette width for each
+  # cluster at each resolution, finding mean silhouette width for each
   while (TRUE) {
-    clusters <- map(resolutions, 
-                    ~ FindClusters(object, resolution = .x)@active.ident
-                    )
-    distances <- cluster::daisy(object@reductions$pca@cell.embeddings[, dims])
+    print(paste("Finding clusters for resolutions", 
+            paste(resolutions, collapse = ", ")))
+    clusters <- 
+      map(resolutions, 
+          ~ FindClusters(object, resolution = .x, verbose = FALSE)@active.ident)
+    distances <- dist(object@reductions$pca@cell.embeddings[, dims])
     
     # calc silhouettes for all resolutions
     calc_silhouettes <- function(resolution, assay = "integrated") {
-      sil <- cluster::silhouette(resolution, distances)
       print(paste("Testing", resolution))
+      sil <- cluster::silhouette(resolution, distances)
       return(mean(sil[, 3]))
     }
     silhouettes <- map_dbl(clusters, calc_silhouettes)
@@ -78,8 +80,7 @@ choose_resolution <- function(object, resolutions = NULL,
     if (best_width != max(resolutions)) {
       break()
     } else {
-      resolutions <- seq(max(resolutions) + 0.2, max(resolutions) + 1, by = 0.2)
-      clusters <- list()
+      resolutions <- seq(max(resolutions), max(resolutions) + 1, by = 0.2)
     }
   }
   print(paste("Using resolution", best_width, "for clustering."))
@@ -95,6 +96,7 @@ cluster <- function(object, assay = "integrated") {
   }
   pcs <- object@reductions$pca@misc$sig_pcs
   # Find neighbors and cluster and different resolutions
+  print("Finding nearest neighbors")
   object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE)
   res <- choose_resolution(object, resolutions = seq(0.2, 1, by = 0.2))
   object <- FindClusters(object, resolution = res)
