@@ -57,41 +57,33 @@ choose_resolution <- function(object, resolutions = NULL,
                               assay = "integrated") {
   dims <- 1:object@reductions$pca@misc$sig_pcs
   
+  # run through all clusters, finding mean silhouette width for each
   while (TRUE) {
-    object <- FindClusters(object, resolution = resolutions, verbose = FALSE)
+    clusters <- map(resolutions, 
+                    ~ FindClusters(object, resolution = .x)@active.ident
+                    )
+    distances <- cluster::daisy(object@reductions$pca@cell.embeddings[, dims])
     
     # calc silhouettes for all resolutions
     calc_silhouettes <- function(resolution, assay = "integrated") {
-      col <- paste0(assay, "_snn_res.", resolution)
-      sil <- cluster::silhouette(
-        as.numeric(object@meta.data[, col]), 
-        cluster::daisy(object@reductions$pca@cell.embeddings[, dims])
-      )
-      return(sil[,3])
+      sil <- cluster::silhouette(resolution, distances)
+      print(paste("Testing", resolution))
+      return(mean(sil[, 3]))
     }
-    silhouettes <- map(resolutions, calc_silhouettes)
+    silhouettes <- map_dbl(clusters, calc_silhouettes)
+    names(silhouettes) <- resolutions
     
     # choose resolution with highest mean silhouette width
-    best_width <- silhouettes %>% 
-      set_names(resolutions) %>%
-      map_dbl(., mean) %>%
-      sort(decreasing = TRUE) %>%
-      .[1] %>%
-      names()
-    
+    best_width <- sort(silhouettes, decreasing = TRUE)[1] %>% names()
     if (best_width != max(resolutions)) {
       break()
+    } else {
+      resolutions <- seq(max(resolutions) + 0.2, max(resolutions) + 1, by = 0.2)
+      clusters <- list()
     }
-    resolutions <- seq(max(resolutions) + 0.2, max(resolutions) + 1, by = 0.2)
   }
-  
   print(paste("Using resolution", best_width, "for clustering."))
-  
-  # assign clusters to active.ident slot
-  ident_name <- paste0(assay, "_snn_res.", best_width)
-  object@active.ident <- object@meta.data[, ident_name]
-  names(object@active.ident) <- rownames(object@meta.data)
-  return(object)
+  return(best_width)
 }
 
 # - Cluster -------------------------------------------------------------------
@@ -104,7 +96,8 @@ cluster <- function(object, assay = "integrated") {
   pcs <- object@reductions$pca@misc$sig_pcs
   # Find neighbors and cluster and different resolutions
   object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE)
-  object <- choose_resolution(object, resolutions = seq(0.4, 2, by = 0.2))
+  res <- choose_resolution(object, resolutions = seq(0.2, 1, by = 0.2))
+  object <- FindClusters(object, resolution = res)
   return(object)
 }
 
