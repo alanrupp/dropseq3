@@ -108,7 +108,7 @@ cluster <- function(object, assay = "integrated") {
 
 # - Optimize UMAP ------------------------------------------------------------
 # Run UMAP for different neighbors and distance parameters
-get_umap_coordinates <- function(neighbors, distance) {
+get_umap_coordinates <- function(mtx, neighbors, distance) {
   as.data.frame(uwot::umap(mtx, n_neighbors = neighbors, min_dist = distance))
 }
 
@@ -144,7 +144,7 @@ optimize_umap <- function(object, method = "dunn") {
   # get UMAP coordinates
   results <- map(
     1:nrow(search_grid), 
-    ~ get_umap_coordinates(search_grid[.x, ]$Var1, search_grid[.x, ]$Var2)
+    ~ get_umap_coordinates(mtx, search_grid[.x, ]$Var1, search_grid[.x, ]$Var2)
     )
   
   # calculate cluster quality with Dunn or Silhouette width
