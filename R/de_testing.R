@@ -59,6 +59,9 @@ choose_resolution <- function(object, resolutions = NULL,
   
   # cluster at each resolution, finding mean silhouette width for each
   while (TRUE) {
+    if (is.null(resolutions)) {
+      return(NULL)
+    }
     print(paste("Finding clusters for resolutions", 
             paste(resolutions, collapse = ", ")))
     clusters <- 
@@ -67,16 +70,16 @@ choose_resolution <- function(object, resolutions = NULL,
     distances <- dist(object@reductions$pca@cell.embeddings[, dims])
     
     # calc silhouettes for all resolutions
-    calc_silhouettes <- function(resolution, assay = "integrated") {
-      print(paste("Testing", resolution))
-      sil <- cluster::silhouette(resolution, distances)
+    calc_silhouettes <- function(cluster_results, assay = "integrated") {
+      sil <- cluster::silhouette(as.numeric(cluster_results), distances)
       return(mean(sil[, 3]))
     }
-    silhouettes <- map_dbl(clusters, calc_silhouettes)
-    names(silhouettes) <- resolutions
+    widths <- map_dbl(clusters, calc_silhouettes)
+    names(widths) <- resolutions
     
     # choose resolution with highest mean silhouette width
-    best_width <- sort(silhouettes, decreasing = TRUE)[1] %>% names()
+    print(widths)
+    best_width <- sort(widths, decreasing = TRUE)[1] %>% names()
     if (best_width != max(resolutions)) {
       break()
     } else {
@@ -84,7 +87,7 @@ choose_resolution <- function(object, resolutions = NULL,
     }
   }
   print(paste("Using resolution", best_width, "for clustering."))
-  return(best_width)
+  return(as.numeric(best_width))
 }
 
 # - Cluster -------------------------------------------------------------------
@@ -104,48 +107,55 @@ cluster <- function(object, assay = "integrated") {
 }
 
 # - Optimize UMAP ------------------------------------------------------------
+# Run UMAP for different neighbors and distance parameters
+get_umap_coordinates <- function(neighbors, distance) {
+  as.data.frame(uwot::umap(mtx, n_neighbors = neighbors, min_dist = distance))
+}
+
+# Get Dunn Index from embeddings and clusters
+get_dunn_index <- function(embeddings, clusters) {
+  distances <- dist(embeddings) %>% as.matrix()
+  get_min <- function(cluster) {
+    min(distances[object@active.ident == cluster, object@active.ident != cluster])
+  }
+  get_max <- function(cluster) {
+    max(distances[object@active.ident == cluster, object@active.ident == cluster])
+  }
+  result <- map_dbl(clusters, ~ get_min(.x) / get_max(.x))
+  return(mean(result))
+}
+
+# Get Silhouette width from embeddings and clusters
+get_silhouette_width <- function(embeddings, clusters) {
+  distances <- dist(embeddings)
+  sil <- cluster::silhouette(clusters, distances)
+  return(mean(sil[, 3]))
+}
+
+# Find optimized UMAP parameters
 optimize_umap <- function(object, method = "dunn") {
+  # set up parameters
   pcs <- object@reductions$pca@misc$sig_pcs
-  mtx <- object@reductions$pca@cell.embeddings[,1:pcs]
+  mtx <- object@reductions$pca@cell.embeddings[, 1:pcs]
   neighbors <- seq(5, 50, by = 5)
   dists <- c(0.001, 0.005, 0.01, 0.05, 0.1, 0.5)
   search_grid <- expand.grid(neighbors, dists)
-  # get UMAP coordinates
-  get_coordinates <- function(neighbors, distance) {
-    as.data.frame(uwot::umap(mtx, n_neighbors = neighbors, min_dist = distance))
-  }
-  results <- map(1:nrow(search_grid), 
-                 ~ get_coordinates(search_grid[.x, ]$Var1, search_grid[.x, ]$Var2))
   
+  # get UMAP coordinates
+  results <- map(
+    1:nrow(search_grid), 
+    ~ get_umap_coordinates(search_grid[.x, ]$Var1, search_grid[.x, ]$Var2)
+    )
+  
+  # calculate cluster quality with Dunn or Silhouette width
   if (method == "dunn") {
-    # calculate Dunn index for compactness of clusters
-    dunn_index <- function(result) {
-      distances <- dist(result) %>% as.matrix()
-      clusters <- unique(object@active.ident)
-      get_min <- function(cluster) {
-        min(distances[object@active.ident == cluster, object@active.ident != cluster])
-      }
-      get_max <- function(cluster) {
-        max(distances[object@active.ident == cluster, object@active.ident == cluster])
-      }
-      result <- map_dbl(clusters, ~ get_min(.x) / get_max(.x))
-      return(mean(result))
-      }
-    scores <- map_dbl(results, dunn_index)
+    scores <- map_dbl(results, ~ dunn_index(.x, object@active.ident))
     } else if (method == "silhouette") {
     # calculate silhouette width for each coordinate state
-    calc_silhouettes <- function(result) {
-      sil <- cluster::silhouette(as.numeric(object@active.ident),
-                                 cluster::daisy(result)
-      )
-      return(mean(sil[, 3]))
-    }
-    scores <- map_dbl(results, calc_silhouettes)
+    scores <- map_dbl(results, ~ calc_silhouettes(.x, object@active.ident))
   }
   search_grid$mean_scores <- scores
-  search_grid <- rename(search_grid,
-                        "n_neighbors" = Var1,
-                        "min_dist" = Var2)
+  search_grid <- rename(search_grid, "n_neighbors" = Var1, "min_dist" = Var2)
   search_grid <- arrange(search_grid, desc(mean_scores))
   return(search_grid)
 }
