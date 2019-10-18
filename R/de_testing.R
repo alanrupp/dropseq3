@@ -115,13 +115,11 @@ get_umap_coordinates <- function(mtx, neighbors, distance) {
 # Get Dunn Index from embeddings and clusters
 get_dunn_index <- function(embeddings, clusters) {
   distances <- dist(embeddings) %>% as.matrix()
-  get_min <- function(cluster) {
-    min(distances[object@active.ident == cluster, object@active.ident != cluster])
-  }
-  get_max <- function(cluster) {
-    max(distances[object@active.ident == cluster, object@active.ident == cluster])
-  }
-  result <- map_dbl(clusters, ~ get_min(.x) / get_max(.x))
+  result <- map_dbl(
+    clusters, 
+    ~ min(distances[clusters == .x, clusters != .x]) / 
+      max(distances[clusters == .x, clusters == .x])
+  )
   return(mean(result))
 }
 
@@ -135,6 +133,7 @@ get_silhouette_width <- function(embeddings, clusters) {
 # Find optimized UMAP parameters
 optimize_umap <- function(object, method = "dunn") {
   # set up parameters
+  cat("Setting up parameter space\n")
   pcs <- object@reductions$pca@misc$sig_pcs
   mtx <- object@reductions$pca@cell.embeddings[, 1:pcs]
   neighbors <- seq(5, 50, by = 5)
@@ -142,17 +141,18 @@ optimize_umap <- function(object, method = "dunn") {
   search_grid <- expand.grid(neighbors, dists)
   
   # get UMAP coordinates
-  results <- map(
-    1:nrow(search_grid), 
-    ~ get_umap_coordinates(mtx, search_grid[.x, ]$Var1, search_grid[.x, ]$Var2)
+  cat("Calculating UMAP dimensions for each set of UMAP parameters\n")
+  results <- apply(search_grid, 1, function(x) 
+    get_umap_coordinates(mtx, x["Var1"], x["Var2"])
     )
   
   # calculate cluster quality with Dunn or Silhouette width
   if (method == "dunn") {
-    scores <- map_dbl(results, ~ dunn_index(.x, object@active.ident))
+    cat("Calculating Dunn index for each set of UMAP parameters\n")
+    scores <- map_dbl(results, ~ get_dunn_index(.x, object@active.ident))
     } else if (method == "silhouette") {
     # calculate silhouette width for each coordinate state
-    scores <- map_dbl(results, ~ calc_silhouettes(.x, object@active.ident))
+    scores <- map_dbl(results, ~ get_silhouette_width(.x, object@active.ident))
   }
   search_grid$mean_scores <- scores
   search_grid <- rename(search_grid, "n_neighbors" = Var1, "min_dist" = Var2)
@@ -161,8 +161,8 @@ optimize_umap <- function(object, method = "dunn") {
 }
 
 # - Run UMAP ------------------------------------------------------------------
-run_umap <- function(object) {
-  parameters <- optimize_umap(object)
+run_umap <- function(object, method = "dunn") {
+  parameters <- optimize_umap(object, method = method)
   object <- RunUMAP(object, 
                     dims = 1:object@reductions$pca@misc$sig_pcs,
                     n.neighbors = parameters[1, ]$n_neighbors,
@@ -180,79 +180,47 @@ find_expressed <- function(object, min_cells = 10, min_counts = 1) {
 }
 
 # - Cluster identity all cells -----------------------------------------------
-find_classes <- function(object, markers) {
-  classes <- read_csv("~/Programs/dropseq3/data/celltype_markers.csv")
-  classes <- classes %>% mutate("score" = str_count(paper, "\\,") + 1)
+get_gsea_scores <- function(markers, only_classes = NULL) {
+  classes <- read_csv("~/Programs/dropseq3/data/celltype_markers.csv", 
+                      col_types = c("ccc"))
   
-  # grab unique clusters & classes
-  clusters <- sort(unique(object@active.ident))
+  markers <- markers %>%
+    group_by(cluster) %>%
+    filter(!duplicated(gene))
+  
+  # get each score
+  get_each_gsea_score <- function(marker_genes, class) {
+    genes <- filter(classes, cells == class)$gene
+    other_genes <- filter(classes, cells != class)$gene
+    marker_genes <- marker_genes %>%
+      mutate(score = ifelse(gene %in% genes, avg_logFC,
+                            ifelse(gene %in% other_genes, -avg_logFC, 0)))
+    score <- cumsum(marker_genes$score)
+    return(max(score, na.rm = TRUE))
+  }
+  
+  # for each cluster
   unique_classes <- sort(unique(classes$cells))
-  
-  # find most likely class for each cluster
-  find_class <- function(clstr) {
-    # get list of DE genes from that cluster in descending order of enrichment
-    de_genes <- 
-      markers %>%
-      arrange(desc(pct.1 - pct.2)) %>%
-      filter(cluster == clstr) %>% 
-      .$gene
-    
-    # find cumulative score for each gene
-    class_score <- function(class) {
-      this_class <- filter(classes, cells == class)
-      other_classes <- filter(classes, cells != class)
-      each_score <- 
-        map_dbl(de_genes, 
-            ~ ifelse(.x %in% this_class$gene,
-                     filter(this_class, gene == .x)$score, 
-                     ifelse(.x %in% other_classes$gene,
-                            1 - filter(other_classes, gene == .x)$score, 0
-                            )
-                     )
-      ) %>% unlist()
-      cumulative_score <- cumsum(each_score)
-      if (max(cumulative_score) == 0) {
-        peak <- NA
-      } else {
-        peak <- min(which(cumulative_score == max(cumulative_score)))
-      }
-      return(peak)
-    }
-    
-    result <- map(unique_classes, class_score) %>% unlist()
-    best_hit <- which(result == max(result, na.rm = TRUE))
-    if (length(best_hit) == 0) {
-      return(NA)
-    } else if (length(best_hit) == 1) {
-      return(unique_classes[best_hit])
-    } else 
-      return(unique_classes[best_hit[1]])
+  if (!is.null(only_classes)) {
+    unique_classes <- unique_classes[unique_classes %in% only_classes]
+  }
+  get_cluster_gsea_scores <- function(clstr) {
+    marker_genes <- filter(markers, cluster == clstr) %>%
+      filter(p_val_adj < 0.05) %>%
+      arrange(desc(avg_logFC))
+    scores <- map_dbl(unique_classes, ~ get_each_gsea_score(marker_genes, .x))
+    # normalize
+    scores <- scores - min(scores)
+    scores <- scores / max(scores)
+    return(scores)
   }
   
-  # run for all clusters
-  results <- map_chr(clusters, find_class)
-  results <- data.frame("cluster" = clusters, "class" = results)
-  
-  # Find highest DE gene from hit class for each cluster
-  classic_markers <- function(classes_df) {
-    markers_df <- arrange(markers, desc(pct.1 - pct.2))
-    clusters <- unique(classes_df$cluster)
-    
-    classic_marker <- function(clstr) {
-      class <- filter(classes_df, cluster == clstr)$class
-      if (is.na(class)) {
-        hit <- NA
-      } else {
-        marker_genes <- filter(classes, cells == class)$gene
-        hit <- filter(markers, cluster == clstr & gene %in% marker_genes)$gene[1]
-      }
-      return(hit)
-    }
-    return(map(clusters, classic_marker) %>% unlist())
-  }
-  results$marker <- classic_markers(results)
-  
-  return(results)
+  # for all clusters
+  clusters <- sort(unique(markers$cluster))
+  result <- map(clusters, get_cluster_gsea_scores)
+  result <- bind_cols(result) %>% set_names(clusters) %>% as.data.frame()
+  rownames(result) <- unique_classes
+  return(result)
 }
 
 # - Simplify conserved markers -----------------------------------------------
@@ -681,7 +649,7 @@ edgeR_test <- function(mtx, metadata, treatment) {
 }
 
 # - Grab clusters by type ------------------------------------------------------
-grab_type <- function(object, classes, type = "Neuron") {
+grab_type <- function(object, classes, type) {
   # construct a tree based on marker genes for that cell type
   class_genes <- read_csv("~/Programs/dropseq3/data/celltype_markers.csv")
   means <- cluster_means(object, genes = class_genes$gene)
