@@ -53,156 +53,69 @@ gg_color_hue <- function(n) {
   hcl(h = hues, l = 65, c = 100)[1:n]
 }
 
-# - Heatmap plot --------------------------------------------------------------
-order_clusters <- function(object, cells = NULL, genes = NULL, scale = TRUE,
-                           col_names = FALSE, row_names = FALSE, 
-                           heatmap_legend = FALSE) {
-  if (is.null(cells)) {
-    cells <- colnames(object@assays$RNA@data)
+# - Clip matrix ---------------------------------------------------------------
+# auto clip high and low to center at 0
+auto_clip <- function(mtx) {
+  values <- as.matrix(mtx)
+  if (abs(min(values)) < max(values)) {
+    clip <- abs(min(values))
+    mtx <- apply(mtx, c(1,2), function(x) ifelse(x > clip, clip, x))
+  } else if (abs(min(values)) < max(values)) {
+    clip <- max(values)
+    mtx <- apply(mtx, c(1,2), function(x) ifelse(x < -clip, -clip, x))
   }
-  if (is.null(genes)) {
-    genes <- rownames(object@assays$RNA@data)
-  } 
-  
-  cells <- cells[cells %in% colnames(object@assays$RNA@data)]
-  genes <- genes[genes %in% rownames(object@assays$RNA@data)]
-  
-  if (scale == TRUE) {
-    matrix <- object@assays$RNA@scale.data[genes, ]
-  } else {
-    matrix <- object@assays$RNA@data[genes, ]
-  }
-  
-  # functions to grab cells and calculate mean expression
-  mean_expression <- function(matrix, cells) {
-    rowMeans(matrix[, cells])
-  }
-  cells_use <- function(object, ident) {
-    names(object@active.ident)[object@active.ident == ident]
-  }
-  
-  # calculate mean expression by cluster
-  mean_values <-
-    map(unique(object@active.ident),
-        ~mean_expression(matrix, cells = cells_use(object, .x))) %>%
-    as.data.frame() %>%
-    set_names(unique(object@active.ident)) %>%
-    t()
-  
-  # auto clip high and low to center at 0
-  auto_clip <- function(mtx) {
-    values <- as.matrix(mtx)
-    if (abs(min(values)) < max(values)) {
-      clip <- abs(min(values))
-      mtx <- apply(mtx, c(1,2), function(x) ifelse(x > clip, clip, x))
-    } else if (abs(min(values)) < max(values)) {
-      clip <- max(values)
-      mtx <- apply(mtx, c(1,2), function(x) ifelse(x < -clip, -clip, x))
-    }
-    return(mtx)
-  }
-  
-  if (scale == TRUE) {
-    mean_values <- auto_clip(mean_values)
-  }
-  
-  dists <- dist(mean_values)
-  clusts <- hclust(dists)
-  
-  return(clusts$labels[clusts$order])
+  return(mtx)
+}
+
+# - Order clusters by gene list -----------------------------------------------
+order_clusters <- function(object, genes = NULL, scale = TRUE) {
+  mean_values <- cluster_means(object, genes)
+  tree <- hclust(dist(t(mean_values)))
+  return(tree$labels[tree$order])
 }
 
 # Heatmap plot ----------------------------------------------------------
 heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
-                         cluster_order = NULL,
-                         label_genes = FALSE, 
-                         label_clusters = TRUE, 
-                         heatmap_legend = FALSE,
-                         cut_clusters = 1,
-                         cut_genes = 1,
-                         order_genes = FALSE,
-                         title = NA) {
-  # filter cells
-  if (is.null(cells)) {
-    cells <- colnames(object@assays$RNA@data)
-    idents <- unique(object@active.ident)
-  } else {
-    cells <- cells[cells %in% colnames(object@assays$RNA@data)]
-    idents <- unique(object@active.ident[names(object@active.ident) %in% cells])
-  }
-  # filter genes
-  if (is.null(genes)) {
-    genes <- rownames(object@assays$RNA@data)
-  } 
-  genes <- genes[genes %in% rownames(object@assays$RNA@data)]
-  
-  if (scale == TRUE) {
-    matrix <- object@assays$RNA@scale.data[genes, cells]
-    # make red --> white --> blue color palette
-    endcolors <- c("red4", "white", "royalblue4")
-    color_pal <- c(colorRampPalette(c(endcolors[1], endcolors[2]))(50), 
-                   colorRampPalette(c(endcolors[2], endcolors[3]))(51)[-1])
-  } else {
-    matrix <- object@assays$RNA@data[genes, cells]
-    color_pal <- viridis::viridis(10)
-  }
-  
-  # functions to grab cells and calculate mean expression
-  mean_expression <- function(cluster) {
-    cell_subset <- names(object@active.ident)[object@active.ident == cluster]
-    matrix_subset <- matrix[, cell_subset]
-    return(Matrix::rowMeans(matrix_subset))
-  }
+                         cluster_order = NULL, label_genes = FALSE,heatmap_legend = FALSE,
+                         cut_clusters = 1, cut_genes = 1,
+                         order_genes = FALSE, title = NA,
+                         max_expr = NULL) {
   
   # calculate mean expression by cluster
-  mean_values <-
-    map(idents, mean_expression) %>%
-    as.data.frame() %>%
-    set_names(idents) %>%
-    t()
+  mean_values <- cluster_means(object, genes)
   
-  # auto clip high and low to center at 0
-  auto_clip <- function(mtx) {
-    values <- as.matrix(mtx)
-    if (abs(min(values)) < max(values)) {
-      clip <- abs(min(values))
-      mtx <- apply(mtx, c(1,2), function(x) ifelse(x > clip, clip, x))
-    } else if (abs(min(values)) < max(values)) {
-      clip <- max(values)
-      mtx <- apply(mtx, c(1,2), function(x) ifelse(x < -clip, -clip, x))
-    }
-    return(mtx)
-  }
+  # cluster genes to group expression patterns
+  gene_clusters <- hclust(dist(mean_values))
+  gene_order <- gene_clusters$label[gene_clusters$order]
   
-  if (scale == TRUE) {
-    mean_values <- auto_clip(mean_values)
+  # tidy
+  mean_values <- as.data.frame(mean_values) %>%
+    rownames_to_column("gene") %>%
+    gather(-gene, key = "cluster", value = "expr") %>%
+    mutate(cluster = factor(cluster, levels = levels(object@active.ident))) %>%
+    mutate(gene = factor(gene, levels = gene_order))
+  
+  
+  
+  if (!is.null(max_expr)) {
+    mean_values <- mean_values %>%
+      mutate(expr = ifelse(expr > max_expr, max_expr, expr))
   }
   
   # plot
-  if (order_genes == TRUE) {
-    plt <-
-      pheatmap::pheatmap(mean_values, 
-                         show_colnames = label_genes,
-                         show_rownames = label_clusters,
-                         treeheight_col = 0,
-                         legend = heatmap_legend,
-                         color = color_pal,
-                         cutree_rows = cut_clusters,
-                         cluster_cols = FALSE,
-                         main = title)
-  } else {
-    plt <-
-      pheatmap::pheatmap(mean_values, 
-                         show_colnames = label_genes,
-                         show_rownames = label_clusters,
-                         treeheight_col = 0,
-                         legend = heatmap_legend,
-                         color = color_pal,
-                         cutree_cols = cut_genes,
-                         cutree_rows = cut_clusters,
-                         main = title)
+  p <- ggplot(mean_values, aes(x = cluster, y = fct_rev(gene))) +
+    geom_tile(aes(fill = expr), color = NA) +
+    scale_fill_gradient2(low = "#d0587e", mid = "white", high = "#009392",
+                         name = "z-score") +
+    theme_void() +
+    scale_x_discrete(expand = c(0, 0)) +
+    scale_y_discrete(expand = c(0, 0)) +
+    xlab(NULL) + ylab(NULL) +
+    theme(axis.text.x = element_text(color = "black"))
+  if (label_genes) {
+    p <- p + theme(axis.text = element_text(color = "black"))
   }
-  return(plt)
+  return(p)
 }
 
 # - Clip matrix at upper limit ------------------------------------------------
@@ -287,7 +200,7 @@ heatmap_block <- function(object,
   heatmap_plt <- 
     ggplot(df, aes(x = cell, y = fct_rev(gene))) +
     geom_tile(aes(fill = z), color = NA, show.legend = legend) +
-    scale_fill_gradient2(low = "red4", mid = "white", high = "royalblue4",
+    scale_fill_gradient2(low = "#d0587e", mid = "white", high = "#009392",
                          name = "Expression") +
     theme_void() +
     scale_x_discrete(expand = c(0, 0)) +
