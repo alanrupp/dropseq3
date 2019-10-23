@@ -636,3 +636,18 @@ plot_resolutions <- function(object, assay = "integrated") {
     ))
 }
 
+
+# - Plot GSEA scores ----------------------------------------------------------
+plot_gsea_scores <- function(gsea_scores) {
+  cluster_levels <- colnames(gsea_scores)
+  df <- gsea_scores %>% as.data.frame() %>% rownames_to_column("group") %>%
+    gather(-group, key = "cluster", value = "score") %>%
+    mutate(cluster = factor(cluster, levels = cluster_levels))
+  p <- ggplot(df, aes(x = cluster, y = group, fill = score)) +
+    geom_tile(show.legend = FALSE) +
+    scale_fill_gradient(low = "white", high = "#009392", name = "Score",
+                        na.value = "white") +
+    theme_void() +
+    theme(axis.text = element_text(color = "black"))
+  return(p)
+}
