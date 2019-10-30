@@ -76,26 +76,37 @@ order_clusters <- function(object, genes = NULL, scale = TRUE) {
 
 # Heatmap plot ----------------------------------------------------------
 heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
-                         cluster_order = NULL, label_genes = FALSE,heatmap_legend = FALSE,
-                         cut_clusters = 1, cut_genes = 1,
-                         order_genes = FALSE, title = NA,
-                         max_expr = NULL) {
+                         label_genes = FALSE,
+                         heatmap_legend = FALSE,
+                         cut_clusters = 1, cut_genes = 1, title = NA,
+                         max_expr = NULL,
+                         cluster_genes = FALSE, cluster_clusters = FALSE) {
   
   # calculate mean expression by cluster
   mean_values <- cluster_means(object, genes)
   
   # cluster genes to group expression patterns
-  gene_clusters <- hclust(dist(mean_values))
-  gene_order <- gene_clusters$label[gene_clusters$order]
+  if (cluster_genes) {
+    gene_clusters <- hclust(dist(mean_values))
+    gene_order <- gene_clusters$label[gene_clusters$order]
+  } else {
+    gene_order <- genes
+  }
+  
+  # cluster clusters to group expression patterns
+  if (cluster_clusters) {
+    cluster_clusters <- hclust(dist(t(mean_values)))
+    cluster_order <- cluster_clusters$label[cluster_clusters$order]
+  } else {
+    cluster_order <- levels(object@active.ident)
+  }
   
   # tidy
   mean_values <- as.data.frame(mean_values) %>%
     rownames_to_column("gene") %>%
     gather(-gene, key = "cluster", value = "expr") %>%
-    mutate(cluster = factor(cluster, levels = levels(object@active.ident))) %>%
-    mutate(gene = factor(gene, levels = gene_order))
-  
-  
+    mutate(gene = factor(gene, levels = gene_order)) %>%
+    mutate(cluster = factor(cluster, levels = cluster_order))
   
   if (!is.null(max_expr)) {
     mean_values <- mean_values %>%
@@ -640,9 +651,13 @@ plot_resolutions <- function(object, assay = "integrated") {
 # - Plot GSEA scores ----------------------------------------------------------
 plot_gsea_scores <- function(gsea_scores) {
   cluster_levels <- colnames(gsea_scores)
+  group_cluster <- hclust(dist(gsea_scores))
+  group_levels <- group_cluster$labels[group_cluster$order]
   df <- gsea_scores %>% as.data.frame() %>% rownames_to_column("group") %>%
     gather(-group, key = "cluster", value = "score") %>%
-    mutate(cluster = factor(cluster, levels = cluster_levels))
+    mutate(cluster = factor(cluster, levels = cluster_levels)) %>%
+    mutate(group = factor(group, levels = group_levels))
+  
   p <- ggplot(df, aes(x = cluster, y = group, fill = score)) +
     geom_tile(show.legend = FALSE) +
     scale_fill_gradient(low = "white", high = "#009392", name = "Score",
