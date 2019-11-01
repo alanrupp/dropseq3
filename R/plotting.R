@@ -239,7 +239,7 @@ heatmap_block <- function(object,
 # - Violin plot ---------------------------------------------------------------
 violin_plot <- function(object, genes, tx = NULL, clusters = NULL, 
                         jitter = TRUE, stacked = FALSE, order_genes = FALSE,
-                        ncol = NULL, flip = FALSE, void = FALSE, 
+                        n_col = NULL, flip = FALSE, void = FALSE, 
                         order_clusters = FALSE,
                         colors = NULL) {
   if (is.null(clusters)) {
@@ -317,9 +317,9 @@ violin_plot <- function(object, genes, tx = NULL, clusters = NULL,
   # facet wrap for multiple genes or multiple genes + treatments
   if (length(genes) > 1) {
     if (!is.null(tx)) {
-      plt <- plt + facet_wrap(~gene + Cluster, scales = "free_y")
+      plt <- plt + facet_wrap(~gene + Cluster, scales = "free_y", ncol = n_col)
     } else {
-      plt <- plt + facet_wrap(~gene, scales = "free_y")
+      plt <- plt + facet_wrap(~gene, scales = "free_y", ncol = n_col)
     }
   }
   
