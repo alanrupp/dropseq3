@@ -26,20 +26,21 @@ remove_zeros <- function(mtx) {
 }
 
 # remove unwanted genes
-remove_unwanted_genes <- function(mtx, keep_Gm = FALSE) {
+remove_unwanted_genes <- function(mtx, remove_Gm = TRUE) {
   # remove genes from mitochondrial genome
   nonmito <- read_csv("~/Programs/dropseq3/data/nonmito_genes.csv",
                       col_names = FALSE) %>% .$X1
-  genes <- unique(unlist(map(mtx, rownames)))
-  nonmito <- nonmito[nonmito %in% genes]
   if (class(mtx) == "list") {
+    genes <- unique(unlist(map(mtx, rownames)))
+    nonmito <- nonmito[nonmito %in% genes]
     mtx <- map(mtx, ~ .x[nonmito, ])
   } else if (class(mtx) == "dgCMatrix") {
+    nonmito <- nonmito[nonmito %in% rownames(mtx)]
     mtx <- mtx[nonmito, ]
   }
   
   # remove genes starting with Gm if desired
-  if (keep_Gm == FALSE) {
+  if (remove_Gm) {
     if (class(mtx) == "list") {
       mtx <- map(mtx, ~ .x[!str_detect(rownames(.x), "^Gm"), ])
     } else if (class(mtx) == "dgCMatrix") {
@@ -52,17 +53,14 @@ remove_unwanted_genes <- function(mtx, keep_Gm = FALSE) {
 # remove low abundance genes
 remove_low_abundance_genes <- function(mtx, min_cells = 4) {
   # calculate number of cells expressing a given gene
-  abund <- sapply(mtx, function(x) Matrix::rowSums(x > 0))
   if (class(mtx) == "list") {
-    abund <- rowSums(abund)
-  }
-  
-  # select only genes above
-  keep <- names(abund)[abund >= min_cells]
-  if (class(mtx) == "list") {
+    abund <- sapply(mtx, function(x) Matrix::rowSums(x > 0))
+    keep <- names(abund)[abund >= min_cells]
     mtx <- map(mtx, ~ .x[keep, ])
   } else if (class(mtx) == "dgCMatrix") {
-    mtx <= mtx[keep, ]
+    abund <- Matrix::rowSums(mtx > 0)
+    keep <- names(abund)[abund >= min_cells]
+    mtx <- mtx[keep, ]
   }
   return(mtx)
 }
