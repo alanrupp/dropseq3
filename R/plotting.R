@@ -145,7 +145,6 @@ heatmap_block <- function(object, genes = NULL, cells = NULL,
   if (ncol(object@assays$RNA@data) < n_cells) {
     n_cells <- ncol(object@assays$RNA@data)
   }
-  
   # grab relevant clusters
   if (is.null(clusters)) {
     clusters <- levels(object@active.ident)
@@ -166,7 +165,12 @@ heatmap_block <- function(object, genes = NULL, cells = NULL,
   # filter genes
   if (is.null(genes)) {
     genes <- object@assays$integrated@var.features
-  } 
+  } else {
+    missed <- !genes %in% rownames(object@assays$RNA@counts)
+    warning(paste(paste(genes[missed], collapse = ", "), 
+                  "not present in dataset."))
+    genes <- genes[!missed]
+  }
   
   if (scale) {
     matrix <- object@assays$RNA@scale.data[genes, cells]
