@@ -67,13 +67,6 @@ auto_clip <- function(mtx) {
   return(mtx)
 }
 
-# - Order clusters by gene list -----------------------------------------------
-order_clusters <- function(object, genes = NULL, scale = TRUE) {
-  mean_values <- cluster_means(object, genes)
-  tree <- hclust(dist(t(mean_values)))
-  return(tree$labels[tree$order])
-}
-
 # Heatmap plot ----------------------------------------------------------
 heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
                          label_genes = FALSE,
@@ -141,13 +134,9 @@ clip_matrix <- function(matrix, limit) {
 }
 
 # - Heatmap block -------------------------------------------------------------
-heatmap_block <- function(object,
-                          genes = NULL, 
-                          cells = NULL,
-                          clusters = NULL, 
-                          n_cells = 1000,
-                          scale = TRUE,
-                          label_genes = TRUE, 
+heatmap_block <- function(object, genes = NULL, cells = NULL,
+                          clusters = NULL, n_cells = 1000,
+                          scale = TRUE, label_genes = TRUE, 
                           maxmin = NULL,
                           integrated = FALSE,
                           legend = FALSE) {
@@ -201,12 +190,14 @@ heatmap_block <- function(object,
     left_join(., data.frame("cell" = names(object@active.ident),
                             "cluster" = object@active.ident), 
               by = "cell") %>%
-    mutate("pos" = seq(length(cells))) %>%
+    mutate("pos" = seq(length(cells)))
+  label_text_avg <- label_text %>%
     group_by(cluster) %>%
-    summarize(pos = median(pos))
+    summarize(pos = mean(pos))
   
   # - plots -----------
   plt_list <- list()
+  
   # basic plot
   heatmap_plt <- 
     ggplot(df, aes(x = cell, y = fct_rev(gene))) +
@@ -221,13 +212,21 @@ heatmap_block <- function(object,
   
   # plot axis labels
   label_plt <- 
-    ggplot(label_text, aes(x = pos, y = 0)) +
+    ggplot(label_text_avg, aes(x = pos, y = 0)) +
     geom_text_repel(aes(label = cluster), ylim = c(-Inf, 0), direction = "y",
                     hjust = 0.5) +
     theme_void() +
     scale_x_continuous(expand = c(0, 0), limits = c(1, max(label_text$pos))) +
-    scale_y_continuous(expand = c(0, 0), limits = c(-100, 1)) +
+    scale_y_continuous(expand = c(0, 0), limits = c(-100, 2)) +
     xlab(NULL) + ylab(NULL)
+  for (i in unique(label_text$cluster)) {
+    label_plt <- label_plt +
+      annotate("segment", 
+               x = min(filter(label_text, cluster == i)$pos) + 3, 
+               xend = max(filter(label_text, cluster == i)$pos) -3, 
+               y = 1, 
+               yend = 1, color = "black")
+  }
   plt_list[[2]] <- label_plt
   
   return(cowplot::plot_grid(plotlist = plt_list, ncol = 1,
@@ -649,14 +648,32 @@ plot_resolutions <- function(object, assay = "integrated") {
 
 
 # - Plot GSEA scores ----------------------------------------------------------
-plot_gsea_scores <- function(gsea_scores) {
-  cluster_levels <- colnames(gsea_scores)
+plot_gsea_scores <- function(gsea_scores, zeros = FALSE, 
+                             cluster_clusters = FALSE) {
+  
   group_cluster <- hclust(dist(gsea_scores))
   group_levels <- group_cluster$labels[group_cluster$order]
+  
+  if (cluster_clusters) {
+    cluster_cluster <- hclust(dist(t(gsea_scores)))
+    cluster_levels <- cluster_cluster$labels[cluster_cluster$order]
+  } else {
+    cluster_levels <- colnames(gsea_scores)
+  }
+  
   df <- gsea_scores %>% as.data.frame() %>% rownames_to_column("group") %>%
     gather(-group, key = "cluster", value = "score") %>%
-    mutate(cluster = factor(cluster, levels = cluster_levels)) %>%
-    mutate(group = factor(group, levels = group_levels))
+    mutate(cluster = factor(cluster, levels = cluster_levels),
+           group = factor(group, levels = group_levels))
+  
+  if (!zeros) {
+    zero_classes <- df %>%
+      group_by(group) %>%
+      summarize(frac = sum(score == 0) / n()) %>%
+      filter(frac == 1) %>%
+      .$group
+    df <- filter(df, !group %in% zero_classes)
+  }
   
   p <- ggplot(df, aes(x = cluster, y = group, fill = score)) +
     geom_tile(show.legend = FALSE) +
