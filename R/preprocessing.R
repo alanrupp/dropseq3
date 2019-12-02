@@ -3,12 +3,12 @@ library(reticulate)
 # -- Matrix functions ---------------------------------------------------------
 # keep genes that are in all matrices
 keep_shared_genes <- function(mtx_list) {
-  shared <- map(mtx, rownames) %>% 
+  shared <- map(mtx_list, rownames) %>% 
     unlist() %>% 
     table() %>% 
-    .[. == length(mtx)] %>% 
+    .[. == length(mtx_list)] %>% 
     names()
-  return(map(mtx, ~ .x[shared, ]))
+  return(map(mtx_list, ~ .x[shared, ]))
 }
 
 # remove genes that are not expressed in any cells
