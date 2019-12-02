@@ -29,7 +29,7 @@ remove_zeros <- function(mtx) {
 remove_unwanted_genes <- function(mtx, remove_Gm = TRUE) {
   # remove genes from mitochondrial genome
   nonmito <- read_csv("~/Programs/dropseq3/data/nonmito_genes.csv",
-                      col_names = FALSE) %>% .$X1
+                      col_names = FALSE, col_types = "c") %>% .$X1
   if (class(mtx) == "list") {
     genes <- unique(unlist(map(mtx, rownames)))
     nonmito <- nonmito[nonmito %in% genes]
@@ -54,8 +54,8 @@ remove_unwanted_genes <- function(mtx, remove_Gm = TRUE) {
 remove_low_abundance_genes <- function(mtx, min_cells = 4) {
   # calculate number of cells expressing a given gene
   if (class(mtx) == "list") {
-    abund <- sapply(mtx, function(x) Matrix::rowSums(x > 0))
-    keep <- names(abund)[abund >= min_cells]
+    abund <- apply(sapply(mtx, function(x) Matrix::rowSums(x > 0)), 1, sum)
+    keep <- rownames(mtx[[1]])[abund >= min_cells]
     mtx <- map(mtx, ~ .x[keep, ])
   } else if (class(mtx) == "dgCMatrix") {
     abund <- Matrix::rowSums(mtx > 0)
