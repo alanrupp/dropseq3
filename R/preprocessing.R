@@ -1,6 +1,19 @@
 library(reticulate)
 
 # -- Matrix functions ---------------------------------------------------------
+# downsample matrix 
+downsample_matrix <- function(mtx, n_counts = 1000) {
+  over_limit <- Matrix::colSums(mtx) > n_counts
+  gene_levels <- rownames(mtx); cell_levels <- colnames(mtx)
+  counts <- map(1:ncol(mtx), ~ rep(gene_levels, times = mtx[, .x]))
+  new_counts <- map(counts, ~ sample(.x, n_counts, replace = FALSE))
+  new_counts <- map(new_counts, ~ table(factor(.x, levels = gene_levels)))
+  mtx <- do.call(cbind, new_counts)
+  colnames(mtx) <- cell_levels
+  return(Matrix::Matrix(mtx, sparse = TRUE))
+}
+
+
 # keep genes that are in all matrices
 keep_shared_genes <- function(mtx_list) {
   shared <- map(mtx_list, rownames) %>% 
@@ -61,6 +74,16 @@ remove_low_abundance_genes <- function(mtx, min_cells = 4) {
     abund <- Matrix::rowSums(mtx > 0)
     keep <- names(abund)[abund >= min_cells]
     mtx <- mtx[keep, ]
+  }
+  return(mtx)
+}
+
+# filter
+filter_cells <- function(mtx, min_genes = 500) {
+  if (class(mtx) == "list") {
+    mtx <- map(mtx, ~ .x[, Matrix::colSums(.x > 0) > min_genes])
+  } else if (class(mtx) == "dgCMatrix") {
+    mtx <- mtx[, Matrix::colSums(mtx > 0) > min_genes]
   }
   return(mtx)
 }
