@@ -3,10 +3,10 @@ library(reticulate)
 # -- Matrix functions ---------------------------------------------------------
 # downsample matrix 
 downsample_matrix <- function(mtx, n_counts = 1000) {
-  over_limit <- Matrix::colSums(mtx) > n_counts
   gene_levels <- rownames(mtx); cell_levels <- colnames(mtx)
   counts <- map(1:ncol(mtx), ~ rep(gene_levels, times = mtx[, .x]))
-  new_counts <- map(counts, ~ sample(.x, n_counts, replace = FALSE))
+  new_counts <- map(counts, 
+                    ~ sample(.x, min(n_counts, length(.x)), replace = FALSE))
   new_counts <- map(new_counts, ~ table(factor(.x, levels = gene_levels)))
   mtx <- do.call(cbind, new_counts)
   colnames(mtx) <- cell_levels
@@ -16,11 +16,8 @@ downsample_matrix <- function(mtx, n_counts = 1000) {
 
 # keep genes that are in all matrices
 keep_shared_genes <- function(mtx_list) {
-  shared <- map(mtx_list, rownames) %>% 
-    unlist() %>% 
-    table() %>% 
-    .[. == length(mtx_list)] %>% 
-    names()
+  shared <- sapply(mtx_list, rownames) %>% table() %>% 
+    .[. == length(mtx_list)] %>% names()
   return(map(mtx_list, ~ .x[shared, ]))
 }
 
