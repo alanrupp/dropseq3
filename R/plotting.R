@@ -1,6 +1,7 @@
 library(Seurat)
 library(tidyverse)
 library(ggrepel)
+library(ggdendro)
 
 # - Summarize data ------------------------------------------------------------
 summarize_data <- function(object, genes, clusters = NULL) {
@@ -70,10 +71,11 @@ auto_clip <- function(mtx) {
 # Heatmap plot ----------------------------------------------------------
 heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
                          label_genes = FALSE,
-                         heatmap_legend = FALSE,
-                         cut_clusters = 1, cut_genes = 1, title = NA,
+                         heatmap_legend = FALSE, title = NA,
                          max_expr = NULL,
-                         cluster_genes = FALSE, cluster_clusters = FALSE) {
+                         cluster_genes = TRUE, cluster_clusters = TRUE,
+                         draw_tree = TRUE, tree_scaling = 1,
+                         flipped = FALSE) {
   
   # calculate mean expression by cluster
   mean_values <- cluster_means(object, genes)
@@ -103,7 +105,8 @@ heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
   
   if (!is.null(max_expr)) {
     mean_values <- mean_values %>%
-      mutate(expr = ifelse(expr > max_expr, max_expr, expr))
+      mutate(expr = ifelse(expr > max_expr, max_expr,
+                           ifelse(expr < -max_expr, -max_expr, expr)))
   }
   
   # plot
@@ -118,6 +121,18 @@ heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
     theme(axis.text.x = element_text(color = "black"))
   if (label_genes) {
     p <- p + theme(axis.text = element_text(color = "black"))
+  }
+  if (draw_tree) {
+    dg <- dendro_data(cluster_clusters)
+    p <- p + 
+      geom_segment(data = dg$segments, 
+                   aes(x = x, xend = xend,
+                       y = (y * tree_scaling) + length(genes) - 1 , 
+                       yend = (yend * tree_scaling) + length(genes) - 1))
+  }
+  if (flipped) {
+    p <- p + coord_flip() +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
   }
   return(p)
 }
@@ -167,9 +182,11 @@ heatmap_block <- function(object, genes = NULL, cells = NULL,
     genes <- object@assays$integrated@var.features
   } else {
     missed <- !genes %in% rownames(object@assays$RNA@counts)
-    warning(paste(paste(genes[missed], collapse = ", "), 
-                  "not present in dataset."))
-    genes <- genes[!missed]
+    if (sum(missed) > 0) {
+      warning(paste(paste(genes[missed], collapse = ", "), 
+                    "not present in dataset."))
+      genes <- genes[!missed]
+    }
   }
   
   if (scale) {
@@ -406,7 +423,8 @@ stacked_violin <- function(object, genes, cluster_order = NULL,
 # - UMAP plot ----------------------------------------------------------------
 umap_plot <- function(object, genes, cells = NULL, clusters = NULL, 
                       legend = TRUE, cluster_label = FALSE,
-                      ncol = NULL, xlim = NULL, ylim = NULL) {
+                      ncol = NULL, xlim = NULL, ylim = NULL,
+                      order_genes = FALSE) {
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   } else {
@@ -443,6 +461,10 @@ umap_plot <- function(object, genes, cells = NULL, clusters = NULL,
   results <- pull_data(genes) %>%
     bind_cols(., umap) %>%
     gather(-starts_with("UMAP"), key = "gene", value = "value")
+  
+  if (order_genes) {
+    results <- mutate(results, gene = factor(gene, levels = genes))
+  }
   
   # standardize fill
   results <- results %>%
@@ -652,23 +674,24 @@ plot_resolutions <- function(object, assay = "integrated") {
 
 
 # - Plot GSEA scores ----------------------------------------------------------
-plot_gsea_scores <- function(gsea_scores, zeros = FALSE, 
-                             cluster_clusters = FALSE) {
-  
-  group_cluster <- hclust(dist(gsea_scores))
-  group_levels <- group_cluster$labels[group_cluster$order]
-  
-  if (cluster_clusters) {
-    cluster_cluster <- hclust(dist(t(gsea_scores)))
-    cluster_levels <- cluster_cluster$labels[cluster_cluster$order]
-  } else {
-    cluster_levels <- colnames(gsea_scores)
-  }
+plot_gsea_scores <- function(gsea_scores, zeros = FALSE) {
+  # set levels
+  group_levels <- gsea_scores %>% as.data.frame() %>% 
+    rownames_to_column("group") %>%
+    gather(-group, key = "cluster", value = "score") %>%
+    mutate_at(vars(cluster, score), as.numeric) %>%
+    filter(score > 0) %>%
+    mutate("place" = cluster * score) %>%
+    group_by(group) %>%
+    summarize("place" = median(place)) %>%
+    arrange(place) %>%
+    .$group
+  cluster_levels <- colnames(gsea_scores)
   
   df <- gsea_scores %>% as.data.frame() %>% rownames_to_column("group") %>%
     gather(-group, key = "cluster", value = "score") %>%
-    mutate(cluster = factor(cluster, levels = cluster_levels),
-           group = factor(group, levels = group_levels))
+    mutate(group = factor(group, levels = group_levels),
+           cluster = factor(cluster, levels = cluster_levels))
   
   if (!zeros) {
     zero_classes <- df %>%
@@ -679,11 +702,13 @@ plot_gsea_scores <- function(gsea_scores, zeros = FALSE,
     df <- filter(df, !group %in% zero_classes)
   }
   
-  p <- ggplot(df, aes(x = cluster, y = group, fill = score)) +
+  # plot
+  p <- ggplot(df, aes(x = cluster, y = fct_rev(group), fill = score)) +
     geom_tile(show.legend = FALSE) +
     scale_fill_gradient(low = "white", high = "#009392", name = "Score",
                         na.value = "white") +
     theme_void() +
-    theme(axis.text = element_text(color = "black"))
+    theme(axis.text = element_text(color = "black"),
+          axis.text.y = element_text(hjust = 1))
   return(p)
 }
