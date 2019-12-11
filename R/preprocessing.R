@@ -136,3 +136,21 @@ integrate_data <- function(object) {
   DefaultAssay(object) <- "integrated"
   return(object)
 }
+
+
+# - Scale data --------------------------------------------------------------
+scale_data <- function(object, groups = NULL) {
+  mtx <- object@assays$RNA@counts
+  if (is.null(groups)) {
+    scaled <- Matrix::Matirx(t(scale(t(mtx))), sparse = TRUE)
+  } else {
+    scaled <- matrix(NA, ncol = ncol(mtx), nrow = nrow(mtx))
+    for (group in groups) {
+      scaled[, which(groups == group)] <- 
+        t(scale(t(mtx[, which(groups == group)])))
+    }
+    scaled <- Matrix::Matrix(scaled, sparse = TRUE)
+  }
+  rownames(scaled) <- rownames(mtx); colnames(scaled) <- colnames(mtx)
+  return(scaled)
+}
