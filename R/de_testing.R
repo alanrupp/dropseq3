@@ -17,17 +17,22 @@ cluster_means <- function(object, genes = NULL, assay = "RNA",
   if (is.null(genes)) {
     genes <- rownames(mtx)
   } else {
-    genes <- genes[genes %in% rownames(object@assays$RNA@data)]
+    genes <- genes[genes %in% rownames(mtx)]
   }
   df <-
-    map(clusters,
-        ~ Matrix::rowMeans(mtx[genes, cluster_cells(object, .x)])
-    ) %>% 
+    map(clusters, ~ Matrix::rowMeans(mtx[genes, cluster_cells(object, .x)])) %>% 
     set_names(clusters) %>%
     bind_cols() %>%
     as.data.frame()
   rownames(df) <- genes
   return(df)
+}
+
+# - Order clusters by gene list -----------------------------------------------
+order_clusters <- function(object, genes = NULL, scale = TRUE) {
+  mean_values <- cluster_means(object, genes)
+  tree <- hclust(dist(t(mean_values)))
+  return(tree$labels[tree$order])
 }
 
 # - Choose PCs --------------------------------------------------------------
@@ -146,17 +151,17 @@ optimize_umap <- function(object, method = "dunn") {
     get_umap_coordinates(mtx, x["Var1"], x["Var2"])
     )
   
-  # calculate cluster quality with Dunn or Silhouette width
-  if (method == "dunn") {
-    cat("Calculating Dunn index for each set of UMAP parameters\n")
-    scores <- map_dbl(results, ~ get_dunn_index(.x, object@active.ident))
-    } else if (method == "silhouette") {
-    # calculate silhouette width for each coordinate state
-    scores <- map_dbl(results, ~ get_silhouette_width(.x, object@active.ident))
-  }
-  search_grid$mean_scores <- scores
+  # find correlation between umap result and distance
+  cat("Finding UMAP parameters that are highly correlated with PC distance\n")
+  pc_distances <- dist(mtx) %>% as.matrix() %>% as.vector()
+  correlations <- map_dbl(
+    results, ~ cor(pc_distances, dist(.x) %>% as.matrix %>% as.vector)
+    )
+  
+  cat("Choosing result based on highest correlation\n")
+  search_grid$score <- correlations
   search_grid <- rename(search_grid, "n_neighbors" = Var1, "min_dist" = Var2)
-  search_grid <- arrange(search_grid, desc(mean_scores))
+  search_grid <- arrange(search_grid, desc(score))
   return(search_grid)
 }
 
@@ -177,6 +182,61 @@ find_expressed <- function(object, min_cells = 10, min_counts = 1) {
   calc <- rowSums(object@raw.data >= min_counts) >= min_cells
   calc <- calc[calc == TRUE]
   return(names(calc))
+}
+
+# - Find markers ------------------------------------------------------------
+find_markers <- function(object, cluster, other = NULL, genes = NULL) {
+  if (is.null(genes)) {
+    genes <- rownames(object@assays$RNA@counts)
+  }
+  cells_in <- names(object@active.ident)[object@active.ident %in% cluster]
+  if (is.null(other)) {
+    print(paste("Calculating cluster", paste(cluster, collapse = ",")))
+    cells_out <- names(object@active.ident)[!object@active.ident %in% cluster]
+  } else {
+    print(paste("Calculating cluster", paste(cluster, collapse = ","), 
+                "vs.", paste(other, collapse = ",")))
+    cells_out <- names(object@active.ident)[object@active.ident %in% other]
+  }
+  
+  # function to calculate gene attributes
+  gene_test <- function(gene) {
+    c(wilcox.test(
+      object@assays$RNA@data[gene, cells_in], 
+      object@assays$RNA@data[gene, cells_out], 
+      alternative = "greater")$p.value,
+      round(log(mean(object@assays$RNA@data[gene, cells_in])) - 
+              log(mean(object@assays$RNA@data[gene, cells_out])), 3),
+      round(sum(object@assays$RNA@counts[gene, cells_in] > 0) / 
+              length(cells_in), 3),
+      round(sum(object@assays$RNA@counts[gene, cells_out] > 0) / 
+              length(cells_out), 3)
+    )
+  }
+  
+  # run on all genes
+  mtx <- pbapply::pbsapply(genes, gene_test)
+  mtx <- t(mtx)
+  
+  # adjust P value and export
+  mtx %>% as.data.frame() %>% 
+    set_names("p_val", "avg_logFC", "pct.1", "pct.2") %>%
+    mutate("p_val_adj" = p.adjust(p_val, method = "BH"),
+           "cluster" = paste(cluster, collapse = ", "),
+           "gene" = genes) %>%
+    arrange(p_val_adj)
+}
+
+# - Find All Markers --------------------------------------------------------
+find_all_markers <- function(object, genes = NULL) {
+  if (is.null(genes)) {
+    genes <- rownames(object@assays$RNA@counts)
+  }
+  clusters <- sort(unique(object@active.ident))
+  result <- map(clusters, ~ find_markers(object, .x, genes = genes)) %>%
+    bind_rows() %>%
+    mutate(p_val_adj = p.adjust(p_val))
+  return(result)
 }
 
 # - Cluster identity all cells -----------------------------------------------
@@ -409,7 +469,7 @@ merge_markerless <- function(object, markers) {
 # - Find unique genes -------------------------------------------------------
 find_unique_genes <- function(object, genes = NULL, clusters = NULL,
                               top_n = 1) {
-  mtx <- object@assays$RNA@counts
+  mtx <- object@assays$RNA@scale.data
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   }
@@ -425,8 +485,7 @@ find_unique_genes <- function(object, genes = NULL, clusters = NULL,
       set_names(clusters)
     return(df)
   }
-  df <- cluster_expression(mtx)
-  df <- bind_cols(df)
+  df <- cluster_expression(mtx) %>% bind_cols()
   
   # top 1 and 2 clusters for each gene
   first <- apply(df, 1, function(x) names(sort(x, decreasing = TRUE)[1]))
@@ -504,23 +563,23 @@ de_genes <- function(object, ident1, ident2) {
 # - Merging clusters --------------------------------------------------------
 merge_clusters <- function(object, markers) {
   while (TRUE) {
-    # find 2 neighbors for every cluster based correlation of PCs
+    # find 2 neighbors for every cluster based UMAP distance
     clusters <- unique(object@active.ident)
-    mean_pcs <- map(clusters,
-                    ~ colMeans(object@reductions$pca@cell.embeddings[
-                      names(object@active.ident)[object@active.ident == .x],
-                      1:object@reductions$pca@misc$sig_pcs
-                    ])) %>%
-      bind_cols() %>%
-      set_names(clusters) %>%
-      as.data.frame()
-    neighbors <- cor(mean_pcs) %>%
+    umap <- object@reductions$umap@cell.embeddings
+    cluster_means <- umap %>% 
+      mutate("cluster" = object@active.ident) %>%
+      group_by(cluster) %>%
+      summarize("UMAP1" = median(UMAP_1), "UMAP2" = median(UMAP_2)) %>%
+      as.data.frame() %>%
+      column_to_rownames(cluster)
+    distances <- dist(cluster_means) %>% as.matrix() %>%
       as.data.frame() %>%
       rownames_to_column("cluster") %>%
-      gather(-cluster, key = "neighbor", value = "corr") %>%
-      filter(cluster != neighbor) %>%
+      gather(-cluster, key = "neighbor", value = "dist") %>%
+      filter(cluster != neighbor)
+    neighbors <- distances %>%
       group_by(cluster) %>%
-      arrange(desc(corr)) %>%
+      arrange(dist) %>%
       slice(1:2) %>%
       ungroup()
     
@@ -607,14 +666,22 @@ find_doublet_clusters <- function(object, doublets) {
 
 
 # - edgeR for treatment effects -----------------------------------------------
-edgeR_test <- function(mtx, metadata, treatment) {
+edgeR_test <- function(object, treatment) {
+  # get data
+  mtx <- object@assays$RNA@counts
+  clusters <- object@active.ident
+  tx <- paste(object@meta.data[, treatment], clusters, sep = "_")
+  
+  # set up edgeR
   library(edgeR)
-  y <- DGEList(counts = mtx, group = metadata[, treatment])
+  y <- DGEList(counts = mtx, group = tx)
   y <- calcNormFactors(y)
-  design <- model.matrix(~ 0 + metadata[, treatment])
-  colnames(design) <- levels(metadata[, treatment])
+  design <- model.matrix(~ 0 + tx)
+  colnames(design) <- levels(tx)
   y <- estimateDisp(y, design)
   
+  # make contrasts
+  contrast_list <- c()
   contrasts <- makeContrasts(
     "0" = CNO_0 - Saline_0,
     "1" = CNO_1 - Saline_1,
