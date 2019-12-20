@@ -138,19 +138,43 @@ integrate_data <- function(object) {
 }
 
 
+# - Normalize data ----------------------------------------------------------
+normalize_data <- function(object, method = "TPM", assay = "RNA") {
+  mtx <- slot(object@assays[[assay]], "counts")
+  if (method == "TPM") {
+    # median UMI counts
+    med <- median(Matrix::colSums(mtx))
+    mtx <- log1p(apply(mtx, 2, function(x) x / sum(x)) * med)
+  }
+  slot(object@assays[[assay]], "data") <- Matrix::Matrix(mtx, sparse = TRUE)
+  return(object)
+}
+
 # - Scale data --------------------------------------------------------------
-scale_data <- function(object, groups = NULL) {
-  mtx <- object@assays$RNA@counts
+scale_data <- function(object, groups = NULL, assay = "RNA") {
+  mtx <- slot(object@assays[[assay]], "counts")
   if (is.null(groups)) {
-    scaled <- Matrix::Matirx(t(scale(t(mtx))), sparse = TRUE)
+    scaled <- t(scale(Matrix::t(mtx)))
   } else {
-    scaled <- matrix(NA, ncol = ncol(mtx), nrow = nrow(mtx))
-    for (group in groups) {
-      scaled[, which(groups == group)] <- 
-        t(scale(t(mtx[, which(groups == group)])))
+    scaled <- Matrix::Matrix(
+      matrix(NA, ncol = ncol(mtx), nrow = nrow(mtx)), sparse = TRUE)
+    for (group in unique(groups)) {
+      scaled[, which(object@meta.data[, groups] == group)] <- 
+        t(scale(Matrix::t(mtx[, which(object@meta.data[, groups] == group)])))
     }
     scaled <- Matrix::Matrix(scaled, sparse = TRUE)
   }
   rownames(scaled) <- rownames(mtx); colnames(scaled) <- colnames(mtx)
+  gc(verbose = FALSE)
+  #object@assays[[assay]]@scale.data <- scaled
   return(scaled)
+}
+
+# - PCA knee test -----------------------------------------------------------
+knee_test <- function(object) {
+  n_pc = ncol(object@reductions$pca@cell.embeddings)
+  total_var <- sum(object@reductions$pca@stdev^2)
+  percent_var <- cumsum(object@reductions$pca@stdev^2)/total_var * n_pc
+  diminishing <- which(percent_var - lag(percent_var) < 1)
+  return(min(diminishing) - 1)
 }
