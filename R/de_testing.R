@@ -59,7 +59,7 @@ pca <- function(object) {
 
 # - Choose resolution --------------------------------------------------------
 choose_resolution <- function(object, resolutions = NULL, 
-                              assay = "integrated") {
+                              assay = "integrated", seed = NA) {
   dims <- 1:object@reductions$pca@misc$sig_pcs
   
   # cluster at each resolution, finding mean silhouette width for each
@@ -71,7 +71,8 @@ choose_resolution <- function(object, resolutions = NULL,
             paste(resolutions, collapse = ", ")))
     clusters <- 
       map(resolutions, 
-          ~ FindClusters(object, resolution = .x, verbose = FALSE)@active.ident)
+          ~ FindClusters(object, resolution = .x, 
+                         verbose = FALSE)@active.ident)
     distances <- dist(object@reductions$pca@cell.embeddings[, dims])
     
     # calc silhouettes for all resolutions
@@ -83,7 +84,6 @@ choose_resolution <- function(object, resolutions = NULL,
     names(widths) <- resolutions
     
     # choose resolution with highest mean silhouette width
-    print(widths)
     best_width <- sort(widths, decreasing = TRUE)[1] %>% names()
     if (best_width != max(resolutions)) {
       break()
@@ -96,7 +96,7 @@ choose_resolution <- function(object, resolutions = NULL,
 }
 
 # - Cluster -------------------------------------------------------------------
-cluster <- function(object, assay = "integrated") {
+cluster <- function(object, assay = "RNA", seed = NA) {
   if (assay == "integrated") {
     DefaultAssay(object) <- "integrated"
   } else {
@@ -107,7 +107,7 @@ cluster <- function(object, assay = "integrated") {
   print("Finding nearest neighbors")
   object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE)
   res <- choose_resolution(object, resolutions = seq(0.2, 1, by = 0.2))
-  object <- FindClusters(object, resolution = res)
+  object <- FindClusters(object, resolution = res, random.seed = seed)
   return(object)
 }
 
@@ -185,7 +185,8 @@ find_expressed <- function(object, min_cells = 10, min_counts = 1) {
 }
 
 # - Find markers ------------------------------------------------------------
-find_markers <- function(object, cluster, other = NULL, genes = NULL) {
+find_markers <- function(object, cluster, other = NULL, genes = NULL,
+                         remove_insig = TRUE) {
   if (is.null(genes)) {
     genes <- rownames(object@assays$RNA@counts)
   }
@@ -219,12 +220,16 @@ find_markers <- function(object, cluster, other = NULL, genes = NULL) {
   mtx <- t(mtx)
   
   # adjust P value and export
-  mtx %>% as.data.frame() %>% 
+  mtx <- mtx %>% as.data.frame() %>% 
     set_names("p_val", "avg_logFC", "pct.1", "pct.2") %>%
     mutate("p_val_adj" = p.adjust(p_val, method = "BH"),
            "cluster" = paste(cluster, collapse = ", "),
            "gene" = genes) %>%
     arrange(p_val_adj)
+  if (remove_insig) {
+    mtx <- filter(mtx, p_val_adj < 0.05)
+  }
+  return(mtx)
 }
 
 # - Find All Markers --------------------------------------------------------
@@ -756,3 +761,58 @@ grab_type <- function(object, classes, type) {
     .$new_clusters
   return(names(new_clusters)[new_clusters == real_type])
 }
+
+# - Co-clustering -----------------------------------------------------------
+# recluster a subset of samples
+cluster_sample <- function(object, iter, prop = 0.8) {
+  set.seed(iter)
+  all_cells <- names(object@active.ident)
+  cells <- sample(all_cells, length(all_cells) * prop)
+  object <- subset(object, cells = cells)
+  object <- cluster(object, seed = iter)
+  return(object@active.ident)
+}
+
+# run reclustering N times
+cocluster_frequency <- function(object, iterations = 100) {
+  clusters <- map(seq(iterations), ~ cluster_sample(object, .x))
+  clusters <- map(clusters, ~ data.frame("cell" = names(.x), "cluster" = .x))
+  clusters <- map(1:length(clusters), ~
+                    mutate(clusters[[.x]], "iter" = .x)) %>% 
+    bind_rows()
+  write.csv(clusters, "clusters.csv", row.names = FALSE)
+  # analyze results in python for speed
+  source_python("/home/alanrupp/Programs/dropseq3/python/cocluster.py")
+  d <- read_clusters("clusters.csv")
+  scores <- score(d)
+  rm("clusters.csv")
+  return(scores)
+}
+
+# choose clusters based on co-clustering score
+choose_coclustering_groups <- function(co, max_clusters = 50) {
+  distances <- dist(co)
+  tree <- hclust(distances)
+  distances <- as.matrix(distances)
+  
+  # get J scores
+  calc_youden <- function(cut) {
+    clusters <- cutree(tree, cut)
+    tp <- sum(map_dbl(clusters, ~ sum(co[clusters == .x, clusters == .x] > 0)))
+    tn <- sum(map_dbl(clusters, ~ sum(co[clusters == .x, clusters != .x] == 0)))
+    fp <- sum(map_dbl(clusters, ~ sum(co[clusters == .x, clusters == .x] == 0)))
+    fn <- sum(map_dbl(clusters, ~ sum(co[clusters == .x, clusters != .x] > 0)))
+    j <- (tp/(tp+fn)) + (tn/(tn+fp)) - 1
+    return(j)
+  }
+  cuts <- seq(2, max_clusters)
+  j <- map_dbl(cuts, calc_youden)
+  names(j) <- cuts
+  
+  # choose clustering with highest J
+  clusters <- cutree(tree, as.integer(names(j)[j == max(j)]))
+  return(clusters)
+}
+
+
+
