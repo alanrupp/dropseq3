@@ -425,11 +425,11 @@ umap_plot <- function(object, genes, cells = NULL, clusters = NULL,
                       legend = TRUE, cluster_label = FALSE,
                       ncol = NULL, xlim = NULL, ylim = NULL,
                       order_genes = FALSE) {
+  
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   } else {
     clusters <- clusters[object@active.ident %in% clusters]
-    umap <- umap[object@active.ident %in% clusters, ]
   }
   
   # pull expression data
@@ -442,10 +442,11 @@ umap_plot <- function(object, genes, cells = NULL, clusters = NULL,
   }
   pull_data <- function(genes) {
     if (length(genes) == 1) {
-      df <- object@assays$RNA@data[genes, ] %>% as.data.frame() %>% 
+      df <- object@assays$RNA@data[genes, object@active.ident %in% clusters] %>% 
+        as.data.frame() %>% 
         set_names(genes)
     } else {
-      df <- object@assays$RNA@data[genes, ] %>% 
+      df <- object@assays$RNA@data[genes, object@active.ident %in% clusters] %>% 
         as.matrix() %>% t() %>% as.data.frame()
     }
     return(df)
@@ -456,6 +457,8 @@ umap_plot <- function(object, genes, cells = NULL, clusters = NULL,
     UMAP1 = object@reductions$umap@cell.embeddings[, 1],
     UMAP2 = object@reductions$umap@cell.embeddings[, 2]
   )
+  umap <- umap[object@active.ident %in% clusters, ]
+
   
   # combine umap and expression data
   results <- pull_data(genes) %>%
