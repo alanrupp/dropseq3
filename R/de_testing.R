@@ -238,9 +238,12 @@ find_all_markers <- function(object, genes = NULL) {
     genes <- rownames(object@assays$RNA@counts)
   }
   clusters <- sort(unique(object@active.ident))
-  result <- map(clusters, ~ find_markers(object, .x, genes = genes)) %>%
+  result <- map(
+    clusters, 
+    ~ find_markers(object, .x, genes = genes, remove_insig = FALSE)) %>%
     bind_rows() %>%
-    mutate(p_val_adj = p.adjust(p_val))
+    mutate(p_val_adj = p.adjust(p_val, method = "BH")) %>%
+    filter(p_val_adj < 0.05)
   return(result)
 }
 
