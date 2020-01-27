@@ -155,15 +155,15 @@ scale_data <- function(object, groups = NULL, assay = "RNA") {
   mtx <- slot(object@assays[[assay]], "counts")
   if (is.null(groups)) {
     scaled <- t(scale(Matrix::t(mtx)))
+    rownames(scaled) <- rownames(mtx); colnames(scaled) <- colnames(mtx)
   } else {
-    scaled <- matrix(NA, ncol = ncol(mtx), nrow = nrow(mtx))
-    for (group in unique(groups)) {
-      scaled[, which(object@meta.data[, groups] == group)] <- 
-        t(scale(Matrix::t(mtx[, which(object@meta.data[, groups] == group)])))
-    }
+    scaled <- map(
+      unique(object@meta.data[, groups]),
+      ~ t(scale(Matrix::t(mtx[, which(object@meta.data[, groups] == .x)])))
+      )
+    scaled <- do.call(cbind, scaled)
+    scaled <- scaled[, colnames(mtx)]
   }
-  scaled <- Matrix::Matrix(scaled, sparse = TRUE)
-  rownames(scaled) <- rownames(mtx); colnames(scaled) <- colnames(mtx)
   gc(verbose = FALSE)
   object@assays[[assay]]@scale.data <- scaled
   return(object)
