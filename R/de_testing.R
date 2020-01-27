@@ -336,7 +336,7 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
   }
   
   # if there are < 3 cells per cluster per sample, run standard FindMarkers
-  too_few <- table(object@active.ident, object$mouse) %>%
+  too_few <- table(object@active.ident, object@meta.data[,groupby]) %>%
     as.data.frame() %>%
     filter(Freq < 3) %>%
     .$Var1
