@@ -16,7 +16,7 @@ downsample_matrix <- function(mtx, n_counts = 1000) {
 
 # keep genes that are in all matrices
 keep_shared_genes <- function(mtx_list) {
-  shared <- sapply(mtx_list, rownames) %>% table() %>% 
+  shared <- unlist(sapply(mtx_list, rownames)) %>% table() %>% 
     .[. == length(mtx_list)] %>% names()
   return(map(mtx_list, ~ .x[shared, ]))
 }
@@ -156,18 +156,17 @@ scale_data <- function(object, groups = NULL, assay = "RNA") {
   if (is.null(groups)) {
     scaled <- t(scale(Matrix::t(mtx)))
   } else {
-    scaled <- Matrix::Matrix(
-      matrix(NA, ncol = ncol(mtx), nrow = nrow(mtx)), sparse = TRUE)
+    scaled <- matrix(NA, ncol = ncol(mtx), nrow = nrow(mtx))
     for (group in unique(groups)) {
       scaled[, which(object@meta.data[, groups] == group)] <- 
         t(scale(Matrix::t(mtx[, which(object@meta.data[, groups] == group)])))
     }
-    scaled <- Matrix::Matrix(scaled, sparse = TRUE)
   }
+  scaled <- Matrix::Matrix(scaled, sparse = TRUE)
   rownames(scaled) <- rownames(mtx); colnames(scaled) <- colnames(mtx)
   gc(verbose = FALSE)
-  #object@assays[[assay]]@scale.data <- scaled
-  return(scaled)
+  object@assays[[assay]]@scale.data <- scaled
+  return(object)
 }
 
 # - PCA knee test -----------------------------------------------------------
