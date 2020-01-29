@@ -2,11 +2,12 @@ library(Seurat)
 library(tidyverse)
 
 # - Grab cell names by cluster membership or dismembership -------------------
-cluster_cells <- function(object, cluster) {
-  names(object@active.ident)[object@active.ident == cluster]
-}
-other_cells <- function(object, cluster) {
-  names(object@active.ident)[object@active.ident != cluster]
+get_cells <- function(object, cluster, not = FALSE) {
+  if (not) {
+    names(object@active.ident)[object@active.ident != cluster]
+  } else {
+    names(object@active.ident)[object@active.ident == cluster]
+  }
 }
 
 # - Cluster means -------------------------------------------------------------
@@ -20,7 +21,7 @@ cluster_means <- function(object, genes = NULL, assay = "RNA",
     genes <- genes[genes %in% rownames(mtx)]
   }
   df <-
-    map(clusters, ~ Matrix::rowMeans(mtx[genes, cluster_cells(object, .x)])) %>% 
+    map(clusters, ~ Matrix::rowMeans(mtx[genes, get_cells(object, .x)])) %>% 
     set_names(clusters) %>%
     bind_cols() %>%
     as.data.frame()
@@ -488,7 +489,7 @@ find_unique_genes <- function(object, genes = NULL, clusters = NULL,
   cluster_expression <- function(mtx) {
     df <-
       map(clusters,
-          ~ Matrix::rowMeans(mtx[genes, cluster_cells(object, .x)] > 0)
+          ~ Matrix::rowMeans(mtx[genes, get_cells(object, .x)] > 0)
       ) %>% 
       set_names(clusters)
     return(df)
@@ -815,6 +816,14 @@ choose_coclustering_groups <- function(co, max_clusters = 50) {
   # choose clustering with highest J
   clusters <- cutree(tree, as.integer(names(j)[j == max(j)]))
   return(clusters)
+}
+
+# name clusters
+name_clusters <- function(object, markers) {
+  if (length(unique(markers$cluster)) != length(unique(object@active.ident))) {
+    stop("Mismatched Seurat object and markers data.frame")
+  }
+  
 }
 
 
