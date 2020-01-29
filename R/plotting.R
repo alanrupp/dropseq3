@@ -356,7 +356,7 @@ violin_plot <- function(object, genes, tx = NULL, clusters = NULL,
 
 # - Stacked violin plot -----------------------------------------------------
 stacked_violin <- function(object, genes, cluster_order = NULL,
-                           colors = NULL) {
+                           colors = NULL, angle_names = FALSE) {
   # grab cluster order
   if (is.null(cluster_order)) {
     clusters <- sort(unique(object@active.ident))
@@ -401,13 +401,19 @@ stacked_violin <- function(object, genes, cluster_order = NULL,
       data.frame("cluster" = sort(unique(object@active.ident)),
                  "position" = seq(length(unique(object@active.ident)))),
       aes(x = position, y = 1, label = cluster)) +
-    geom_text(hjust = 0.5) +
     theme_void() +
     scale_x_continuous(expand = c(0, 0), 
                        limits = c(0.5, 
                                   length(unique(object@active.ident)) + 0.5)) +
     scale_y_continuous(expand = c(0, 0)) +
     xlab(NULL) + ylab(NULL)
+  if (angle_names) {
+    cluster_plot <- cluster_plot +
+      geom_text(angle = 45, hjust = 1, vjust = 1)
+  } else {
+    cluster_plot <- cluster_plot +
+      geom_text(hjust = 0.5)
+  }
   plots[[length(plots)+1]] <- cluster_plot
   
   # combine into one plot_grid
@@ -713,5 +719,37 @@ plot_gsea_scores <- function(gsea_scores, zeros = FALSE) {
     theme_void() +
     theme(axis.text = element_text(color = "black"),
           axis.text.y = element_text(hjust = 1))
+  return(p)
+}
+
+
+# - RGB plot -----------------------------------------------------------------
+rgb_plot <- function(object, red = NULL, green = NULL, blue = NULL,
+                     assay = "RNA", data = "data") {
+  get_data <- function(color) {
+    if (is.null(color)) {
+      return(0)
+    } else {
+      d <- slot(slot(object, "assays")[[assay]], data)[color, ]
+      d <- d / max(d)
+    }
+  }
+  
+  df <- data.frame(
+    "UMAP1" = object@reductions$umap@cell.embeddings[,1],
+    "UMAP2" = object@reductions$umap@cell.embeddings[,2],
+    "red" = get_data(red),
+    "green" = get_data(green),
+    "blue" = get_data(blue)
+  ) %>%
+    mutate('cell' = factor(seq(nrow(.)))) %>%
+    mutate("color" = rgb(red, green, blue))
+  
+  # plot
+  p <- ggplot(df, aes(x = UMAP1, y = UMAP2, color = cell)) +
+    scale_color_manual(values = df$color) +
+    geom_point(show.legend = FALSE) +
+    theme_classic() +
+    theme(panel.background = element_rect(fill = "gray40", color = "black"))
   return(p)
 }
