@@ -107,8 +107,10 @@ cluster <- function(object, assay = "RNA", seed = NA) {
   # Find neighbors and cluster and different resolutions
   print("Finding nearest neighbors")
   object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE)
-  res <- choose_resolution(object, resolutions = seq(0.2, 1, by = 0.2))
+  res <- choose_resolution(object, assay = assay,
+                           resolutions = seq(0.2, 1, by = 0.2))
   object <- FindClusters(object, resolution = res, random.seed = seed)
+  gc(verbose = FALSE)
   return(object)
 }
 
@@ -221,7 +223,7 @@ find_markers <- function(object, cluster, other = NULL, genes = NULL,
   mtx <- t(mtx)
   
   # adjust P value and export
-  mtx <- mtx %>% as.data.frame() %>% 
+  mtx <- as.data.frame(mtx) %>% 
     set_names("p_val", "avg_logFC", "pct.1", "pct.2") %>%
     mutate("p_val_adj" = p.adjust(p_val, method = "BH"),
            "cluster" = paste(cluster, collapse = ", "),
@@ -230,11 +232,12 @@ find_markers <- function(object, cluster, other = NULL, genes = NULL,
   if (remove_insig) {
     mtx <- filter(mtx, p_val_adj < 0.05)
   }
+  gc(verbose = FALSE)
   return(mtx)
 }
 
 # - Find All Markers --------------------------------------------------------
-find_all_markers <- function(object, genes = NULL) {
+find_all_markers <- function(object, genes = NULL, remove_insig = TRUE) {
   if (is.null(genes)) {
     genes <- rownames(object@assays$RNA@counts)
   }
@@ -243,8 +246,11 @@ find_all_markers <- function(object, genes = NULL) {
     clusters, 
     ~ find_markers(object, .x, genes = genes, remove_insig = FALSE)) %>%
     bind_rows() %>%
-    mutate(p_val_adj = p.adjust(p_val, method = "BH")) %>%
-    filter(p_val_adj < 0.05)
+    mutate(p_val_adj = p.adjust(p_val, method = "BH"))
+  if (remove_insig) {
+    result <- filter(result, p_val_adj < 0.05)
+  }
+  gc(verbose = FALSE)
   return(result)
 }
 
@@ -826,5 +832,101 @@ name_clusters <- function(object, markers) {
   
 }
 
+# - Traverse tree ------------------------------------------------------------
+traverse_tree <- function(object, genes = NULL) {
+  
+}
 
+# - Calculate p_val, avg_logFC, pct.1, and pct.2 for a gene -------------------
+gene_test <- function(object, gene, cells_in, cells_out) {
+  if (length(cells_in) == 0) {
+    warning("Not enough cells")
+    return(c("p_val" = NA, "avg_logFC" = NA, "pct.1" = NA, "pct.2" = NA))
+  }
+  if (length(cells_out) == 0) {
+    warning("Not enough cells")
+    return(c("p_val" = NA, "avg_logFC" = NA, "pct.1" = NA, "pct.2" = NA))
+  }
+  c("p_val" = wilcox.test(
+    object@assays$RNA@data[gene, cells_in], 
+    object@assays$RNA@data[gene, cells_out], 
+    alternative = "greater")$p.value,
+    "avg_logFC" = round(log(mean(object@assays$RNA@data[gene, cells_in])) -
+                        log(mean(object@assays$RNA@data[gene, cells_out])), 3),
+    "pct.1" = round(sum(object@assays$RNA@counts[gene, cells_in] > 0) / 
+                    length(cells_in), 3),
+    "pct.2" = round(sum(object@assays$RNA@counts[gene, cells_out] > 0) / 
+                    length(cells_out), 3)
+  )
+}
 
+# - Find conserved markers ---------------------------------------------------
+find_conserved_markers <- function(object, cluster, groupby, 
+                                   other = NULL, remove_insig = TRUE,
+                                   genes = NULL) {
+  print(paste("Testing cluster", cluster))
+  if (is.null(genes)) {
+    genes <- rownames(object@assays$RNA@counts)
+  }
+  
+  # functions to grab cells by cluster and group membership
+  get_cells <- function(group) {
+    names(object@active.ident)[object@active.ident == cluster & 
+                                 object@meta.data[,groupby] == group]
+  }
+  get_other <- function(group) {
+    if (is.null(other)) {
+      names(object@active.ident)[object@active.ident != cluster & 
+                                 object@meta.data[, groupby] == group]
+    } else {
+      names(object@active.ident)[object@active.ident %in% other & 
+                                 object@meta.data[, groupby] == group]
+    }
+  }
+  
+  # run on all genes
+  groups <- unique(object@meta.data[, groupby])
+  group_test <- function(gene) {
+    result <- sapply(groups, function(x) 
+      gene_test(object, gene, get_cells(x), get_other(x))
+    )
+    return(c("p_val" = metap::logitp(result[1, ][!is.na(result[1,])])$p,
+             rowMeans(result[2:4,], na.rm = TRUE)
+    ))
+  }
+  mtx <- pbapply::pbsapply(genes, group_test)
+  mtx <- t(mtx)
+  
+  # adjust P value and export
+  mtx <- as.data.frame(mtx) %>% 
+    mutate("p_val_adj" = p.adjust(p_val, method = "BH"),
+           "cluster" = paste(cluster, collapse = ", "),
+           "gene" = genes) %>%
+    arrange(p_val_adj)
+  if (remove_insig) {
+    mtx <- filter(mtx, p_val_adj < 0.05)
+  }
+  gc(verbose = FALSE)
+  return(mtx)
+}
+
+# - Find all conserved markers -----------------------------------------------
+find_all_conserved_markers <- function(object, groupby, remove_insig = TRUE,
+                                       genes = NULL) {
+  
+  if (is.null(genes)) {
+    genes <- rownames(object@assays$RNA@counts)
+  }
+  clusters <- sort(unique(object@active.ident))
+  result <- map(
+    clusters, 
+    ~ find_conserved_markers(object, .x, groupby, 
+                             genes = genes, remove_insig = FALSE)) %>%
+    bind_rows() %>%
+    mutate(p_val_adj = p.adjust(p_val, method = "BH"))
+  if (remove_insig) {
+    result <- filter(result, p_val_adj < 0.05)
+  }
+  gc(verbose = FALSE)
+  return(result)
+}
