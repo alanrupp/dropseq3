@@ -127,8 +127,8 @@ heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
     p <- p + 
       geom_segment(data = dg$segments, 
                    aes(x = x, xend = xend,
-                       y = (y * tree_scaling) + length(genes) - 1 , 
-                       yend = (yend * tree_scaling) + length(genes) - 1))
+                       y = (y * tree_scaling) + length(genes) + 0.5 , 
+                       yend = (yend * tree_scaling) + length(genes) + 0.5))
   }
   if (flipped) {
     p <- p + coord_flip() +
