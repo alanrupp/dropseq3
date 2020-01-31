@@ -847,10 +847,14 @@ gene_test <- function(object, gene, cells_in, cells_out) {
     warning("Not enough cells")
     return(c("p_val" = NA, "avg_logFC" = NA, "pct.1" = NA, "pct.2" = NA))
   }
-  c("p_val" = wilcox.test(
+  p_val <- wilcox.test(
     object@assays$RNA@data[gene, cells_in], 
     object@assays$RNA@data[gene, cells_out], 
-    alternative = "greater")$p.value,
+    alternative = "greater")$p.value
+  if (p_val == 1) {
+    p_val <- 1-10^-9
+  }
+  c("p_val" = p_val,
     "avg_logFC" = round(log(mean(object@assays$RNA@data[gene, cells_in])) -
                         log(mean(object@assays$RNA@data[gene, cells_out])), 3),
     "pct.1" = round(sum(object@assays$RNA@counts[gene, cells_in] > 0) / 
@@ -863,11 +867,17 @@ gene_test <- function(object, gene, cells_in, cells_out) {
 # - Find conserved markers ---------------------------------------------------
 find_conserved_markers <- function(object, cluster, groupby, 
                                    other = NULL, remove_insig = TRUE,
-                                   genes = NULL) {
-  print(paste("Testing cluster", cluster))
+                                   genes = NULL, progress_bar = TRUE) {
+  groups <- unique(object@meta.data[, groupby])
   if (is.null(genes)) {
     genes <- rownames(object@assays$RNA@counts)
   }
+  print(paste0("Testing cluster ", cluster, ": ", 
+               length(genes), " genes from ",
+               sum(object@active.ident == cluster), " cells across ",
+               length(groups), " groups (", 
+               format(Sys.time(), '%H:%M'), ")"))
+  
   
   # functions to grab cells by cluster and group membership
   get_cells <- function(group) {
@@ -885,16 +895,22 @@ find_conserved_markers <- function(object, cluster, groupby,
   }
   
   # run on all genes
-  groups <- unique(object@meta.data[, groupby])
   group_test <- function(gene) {
     result <- sapply(groups, function(x) 
       gene_test(object, gene, get_cells(x), get_other(x))
     )
-    return(c("p_val" = metap::logitp(result[1, ][!is.na(result[1,])])$p,
-             rowMeans(result[2:4,], na.rm = TRUE)
-    ))
+    if (sum(is.na(result[1,]) == length(result[1,]))) {
+      return(c("p_val" = NA, rowMeans(result[2:4,], na.rm = TRUE)))
+    } else {
+      return(c("p_val" = metap::logitp(result[1, ][!is.na(result[1, ])])$p,
+               rowMeans(result[2:4,], na.rm = TRUE)))
+    }
   }
-  mtx <- pbapply::pbsapply(genes, group_test)
+  if (progress_bar) {
+    mtx <- pbapply::pbsapply(genes, group_test)
+  } else {
+    mtx <- sapply(genes, group_test)
+  }
   mtx <- t(mtx)
   
   # adjust P value and export
@@ -912,8 +928,7 @@ find_conserved_markers <- function(object, cluster, groupby,
 
 # - Find all conserved markers -----------------------------------------------
 find_all_conserved_markers <- function(object, groupby, remove_insig = TRUE,
-                                       genes = NULL) {
-  
+                                       genes = NULL, progress_bar = FALSE) {
   if (is.null(genes)) {
     genes <- rownames(object@assays$RNA@counts)
   }
@@ -921,7 +936,8 @@ find_all_conserved_markers <- function(object, groupby, remove_insig = TRUE,
   result <- map(
     clusters, 
     ~ find_conserved_markers(object, .x, groupby, 
-                             genes = genes, remove_insig = FALSE)) %>%
+                             genes = genes, remove_insig = FALSE,
+                             progress_bar = progress_bar)) %>%
     bind_rows() %>%
     mutate(p_val_adj = p.adjust(p_val, method = "BH"))
   if (remove_insig) {
