@@ -839,11 +839,7 @@ traverse_tree <- function(object, genes = NULL) {
 
 # - Calculate p_val, avg_logFC, pct.1, and pct.2 for a gene -------------------
 gene_test <- function(object, gene, cells_in, cells_out) {
-  if (length(cells_in) == 0) {
-    warning("Not enough cells")
-    return(c("p_val" = NA, "avg_logFC" = NA, "pct.1" = NA, "pct.2" = NA))
-  }
-  if (length(cells_out) == 0) {
+  if (length(cells_in) == 0 | length(cells_out) == 0) {
     warning("Not enough cells")
     return(c("p_val" = NA, "avg_logFC" = NA, "pct.1" = NA, "pct.2" = NA))
   }
@@ -901,6 +897,9 @@ find_conserved_markers <- function(object, cluster, groupby,
     )
     if (sum(is.na(result[1,]) == length(result[1,]))) {
       return(c("p_val" = NA, rowMeans(result[2:4,], na.rm = TRUE)))
+    } else if (sum(!is.na(result[1,])) == 1) {
+      return(c("p_val" = result[1,][!is.na(result[1,])], 
+               rowMeans(result[2:4,], na.rm = TRUE)))
     } else {
       return(c("p_val" = metap::logitp(result[1, ][!is.na(result[1, ])])$p,
                rowMeans(result[2:4,], na.rm = TRUE)))
