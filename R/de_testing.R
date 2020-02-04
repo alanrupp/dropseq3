@@ -1,5 +1,6 @@
 library(Seurat)
 library(tidyverse)
+library(reticulate)
 
 # - Grab cell names by cluster membership or dismembership -------------------
 get_cells <- function(object, cluster, not = FALSE) {
@@ -944,4 +945,12 @@ find_all_conserved_markers <- function(object, groupby, remove_insig = TRUE,
   }
   gc(verbose = FALSE)
   return(result)
+}
+
+# - CELLEX --------------------------------------------------------------------
+cellex <- function(counts, clusters) {
+  clusters <- data.frame("cluster" = clusters)
+  source_python("/home/alanrupp/Programs/dropseq3/python/CELLEX.py")
+  esmu <- run_cellex(counts, clusters)
+  return(esmu)
 }
