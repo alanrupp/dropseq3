@@ -954,3 +954,37 @@ cellex <- function(counts, clusters) {
   esmu <- run_cellex(counts, clusters)
   return(esmu)
 }
+
+# - Name clusters -------------------------------------------------------------
+name_clusters <- function(markers, other_pct = 0.2) {
+  # keep the top cluster associated with each gene by pct expression difference
+  markers <- filter(markers, p_val_adj < 0.05) %>%
+    filter(pct.2 <= other_pct) %>%
+    arrange(desc(pct.1 - pct.2)) %>%
+    filter(!duplicated(gene))
+  # using top annotated gene
+  df <- markers %>% mutate("marker" = ifelse(gene %in% annotation$gene, gene, NA))
+  df <- filter(df, !is.na(marker))
+  df <- df %>% group_by(cluster) %>% slice(1) %>% ungroup()
+  df <- select(df, cluster, marker)
+  df <- complete(df, cluster)
+  # using top unannotated if no annotated available
+  if (sum(is.na(df$marker) > 0)) {
+    unnamed <- filter(df, is.na(marker))$cluster
+    markers <- markers %>% 
+      filter(cluster %in% unnamed & !gene %in% annotation$gene) %>%
+      group_by(cluster) %>%
+      slice(1)
+    for (i in unnamed) {
+      if (nrow(markers[markers$cluster == i, ]) == 0) {
+        df[df$cluster == i, ]$marker <- ''
+      } else {
+        df[df$cluster == i, ]$marker <- markers[markers$cluster == i, ]$gene
+      }
+    }
+  }
+  # make final name
+  df <- mutate(df, "name" = paste(cluster, marker, sep = ".")) %>%
+    mutate(name = factor(name, levels = name))
+  return(df)
+}
