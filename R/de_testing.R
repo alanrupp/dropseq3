@@ -825,19 +825,6 @@ choose_coclustering_groups <- function(co, max_clusters = 50) {
   return(clusters)
 }
 
-# name clusters
-name_clusters <- function(object, markers) {
-  if (length(unique(markers$cluster)) != length(unique(object@active.ident))) {
-    stop("Mismatched Seurat object and markers data.frame")
-  }
-  
-}
-
-# - Traverse tree ------------------------------------------------------------
-traverse_tree <- function(object, genes = NULL) {
-  
-}
-
 # - Calculate p_val, avg_logFC, pct.1, and pct.2 for a gene -------------------
 gene_test <- function(object, gene, cells_in, cells_out) {
   if (length(cells_in) == 0 | length(cells_out) == 0) {
@@ -953,6 +940,54 @@ cellex <- function(counts, clusters) {
   source_python("/home/alanrupp/Programs/dropseq3/python/CELLEX.py")
   esmu <- run_cellex(counts, clusters)
   return(esmu)
+}
+
+# - Traverse tree -------------------------------------------------------------
+traverse_tree <- function(object, genes = NULL, assay = "RNA",
+                          data = "data", groupby = NULL) {
+  # grab mean data for each cluster
+  if (is.null(genes)) { genes <- rownames(slot(vmh[[assay]], data)) }
+  means <- cluster_means(vmh, genes, assay = assay, data = data)
+  
+  # generate tree
+  tree <- hclust(dist(t(means)))
+  
+  # find max "DE-ness" for every cut
+  # this is the max -log10 p val for every gene
+  get_de <- function(cut) {
+    clusters <- cutree(tree, cut)
+    if (is.null(groupby)) {
+      markers <- map(
+        unique(clusters),
+        ~ find_markers(vmh, 
+                       cluster = names(clusters)[clusters == .x],
+                       other = names(clusters)[clusters != .x])
+      )
+    } else {
+      markers <- map(
+        unique(clusters),
+        ~ find_conserved_markers(vmh, 
+                                 cluster = names(clusters)[clusters == .x],
+                                 groupby,
+                                 other = names(clusters)[clusters != .x])
+      )
+    }
+    
+    # keep only the lowest p value for each gene
+    markers %>% bind_rows() %>%
+      mutate(p_val_adj = -log10(p_val_adj)) %>%
+      group_by(gene) %>%
+      arrange(desc(p_val_adj)) %>%
+      slice(1) %>% ungroup() %>%
+      summarize("total" = sum(p_val_adj)) %>%
+      .$total
+  }
+  
+  # find DE score for all levels of tree
+  max_clusters <- length(unique(object@active.ident))
+  result <- map_dbl(2:max_clusters, get_de)
+  names(result) <- 2:max_clusters
+  return(result)
 }
 
 # - Name clusters -------------------------------------------------------------
