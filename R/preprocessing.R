@@ -111,11 +111,32 @@ percent_mito <- function(object) {
 }
 
 # - Find variable genes -----------------------------------------------------
-find_variable_genes <- function(object) {
-  df <- data.frame("avg" = Matrix::rowMeans(object@assays$RNA@data),
-                   "disp" = apply(object@assays$RNA@data, 1, var) / 
-                     Matrix::rowMeans(object@assays$RNA@data))
-  model <- loess(disp ~ avg, data = df)
+find_variable_genes <- function(object, genes = NULL, assay = "RNA",
+                                data = "data", n_genes = 2000,
+                                min_avg = 0.1, span = 0.3,
+                                plot = FALSE) {
+  # get data matrix
+  mtx <- slot(object[[assay]], data)
+  # keep only selected genes
+  if (!is.null(genes)) {
+    if (sum(!genes %in% rownames(mtx)) > 0) {
+      warning(paste(paste(genes[!genes %in% rownames(mtx)], collapse = ", "),
+                    "not in dataset."))
+    }
+    genes <- genes[genes %in% rownames(mtx)]
+    mtx <- mtx[genes, ]
+  }
+  # find mean and variance
+  avg <- Matrix::rowMeans(mtx)
+  above <- avg > min_avg
+  df <- data.frame("avg" = avg[above],
+                   "disp" = apply(mtx[above, ], 1, var) / avg[above])
+  # use loess to get smoothed average
+  model <- loess(disp ~ avg, data = df, span = span)
+  var_genes <- model$residuals %>% sort(decreasing = TRUE)
+  var_genes <- names(var_genes)[1:min(n_genes, length(var_genes))]
+  slot(object[[assay]], "var.features") <- var_genes
+  return(object)
 }
 
 # - Remove doublets using Scrublet ---------------------------------------------
@@ -147,6 +168,7 @@ normalize_data <- function(object, method = "TPM", assay = "RNA") {
     mtx <- log1p(apply(mtx, 2, function(x) x / sum(x)) * med)
   }
   slot(object@assays[[assay]], "data") <- Matrix::Matrix(mtx, sparse = TRUE)
+  gc(verbose = FALSE)
   return(object)
 }
 
