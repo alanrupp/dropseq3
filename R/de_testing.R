@@ -71,14 +71,14 @@ choose_resolution <- function(object, resolutions = NULL,
     }
     print(paste("Finding clusters for resolutions", 
             paste(resolutions, collapse = ", ")))
-    clusters <- 
-      map(resolutions, 
-          ~ FindClusters(object, resolution = .x, 
-                         verbose = FALSE)@active.ident)
+    clusters <- map(
+      resolutions, 
+      ~ FindClusters(object, resolution = .x, verbose = FALSE)@active.ident
+      )
     distances <- dist(object@reductions$pca@cell.embeddings[, dims])
     
     # calc silhouettes for all resolutions
-    calc_silhouettes <- function(cluster_results, assay = "integrated") {
+    calc_silhouettes <- function(cluster_results, assay = assay) {
       sil <- cluster::silhouette(as.numeric(cluster_results), distances)
       return(mean(sil[, 3]))
     }
@@ -87,14 +87,16 @@ choose_resolution <- function(object, resolutions = NULL,
     
     # choose resolution with highest mean silhouette width
     best_width <- sort(widths, decreasing = TRUE)[1] %>% names()
+    # if best resolution is the max resolution tested, increase resolution
     if (best_width != max(resolutions)) {
       break()
     } else {
       resolutions <- seq(max(resolutions), max(resolutions) + 1, by = 0.2)
     }
   }
+  # return clusters from max resolution 
   print(paste("Using resolution", best_width, "for clustering."))
-  return(as.numeric(best_width))
+  return(clusters[[which(resolutions == best_width)]])
 }
 
 # - Cluster -------------------------------------------------------------------
@@ -108,9 +110,9 @@ cluster <- function(object, assay = "RNA", seed = NA) {
   # Find neighbors and cluster and different resolutions
   print("Finding nearest neighbors")
   object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE)
-  res <- choose_resolution(object, assay = assay,
-                           resolutions = seq(0.2, 1, by = 0.2))
-  object <- FindClusters(object, resolution = res, random.seed = seed)
+  clusters <- choose_resolution(object, assay = assay,
+                                resolutions = seq(0.2, 1, by = 0.2))
+  object@active.ident <- clusters
   gc(verbose = FALSE)
   return(object)
 }
