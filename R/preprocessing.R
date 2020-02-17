@@ -120,8 +120,8 @@ find_variable_genes <- function(object, genes = NULL, assay = "RNA",
   # keep only selected genes
   if (!is.null(genes)) {
     if (sum(!genes %in% rownames(mtx)) > 0) {
-      warning(paste(paste(genes[!genes %in% rownames(mtx)], collapse = ", "),
-                    "not in dataset."))
+      warning(paste("Genes not in dataset:", 
+                    paste(genes[!genes %in% rownames(mtx)], collapse = ", ")))
     }
     genes <- genes[genes %in% rownames(mtx)]
     mtx <- mtx[genes, ]
