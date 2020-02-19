@@ -264,7 +264,8 @@ get_gsea_scores <- function(markers, only_classes = NULL) {
   
   markers <- markers %>%
     group_by(cluster) %>%
-    filter(!duplicated(gene))
+    filter(!duplicated(gene)) %>%
+    filter(pct.1 > pct.2)
   
   # get each score
   get_each_gsea_score <- function(marker_genes, class) {
@@ -992,36 +993,78 @@ traverse_tree <- function(object, genes = NULL, assay = "RNA",
   return(result)
 }
 
-# - Name clusters -------------------------------------------------------------
-name_clusters <- function(markers, other_pct = 0.2) {
-  # keep the top cluster associated with each gene by pct expression difference
-  markers <- filter(markers, p_val_adj < 0.05) %>%
-    filter(pct.2 <= other_pct) %>%
-    arrange(desc(pct.1 - pct.2)) %>%
-    filter(!duplicated(gene))
-  # using top annotated gene
-  df <- markers %>% mutate("marker" = ifelse(gene %in% annotation$gene, gene, NA))
-  df <- filter(df, !is.na(marker))
-  df <- df %>% group_by(cluster) %>% slice(1) %>% ungroup()
-  df <- select(df, cluster, marker)
-  df <- complete(df, cluster)
-  # using top unannotated if no annotated available
-  if (sum(is.na(df$marker) > 0)) {
-    unnamed <- filter(df, is.na(marker))$cluster
-    markers <- markers %>% 
-      filter(cluster %in% unnamed & !gene %in% annotation$gene) %>%
-      group_by(cluster) %>%
-      slice(1)
-    for (i in unnamed) {
-      if (nrow(markers[markers$cluster == i, ]) == 0) {
-        df[df$cluster == i, ]$marker <- ''
-      } else {
-        df[df$cluster == i, ]$marker <- markers[markers$cluster == i, ]$gene
-      }
+# - Get informative genes -----------------------------------------------------
+get_informative_genes <- function(object, markers, n = 1, clusters = NULL,
+                                  p_val_max = 0.05, n_genes = 50) {
+  # filter the markers data.frame
+  if (!is.null(clusters)) {
+    markers <- filter(markers, cluster %in% clusters)
+  }
+  markers <- filter(markers, p_val_adj < p_val_max)
+  markers <- markers %>% group_by(cluster) %>%
+    arrange(desc(pct.1 - pct.2)) %>% slice(1:n_genes)
+  if (nrow(markers) == 0) {
+    stop("Not enough markers")
+  }
+  # function to return gene TP, TN, FP, FN, and J score
+  gene_test <- function(gene, cluster) {
+    if (length(gene) == 1) {
+      contingency_table <- table(
+        object@assays$RNA@counts[gene, ] > 0, 
+        object@active.ident == cluster
+      )
+    } else if (length(gene) > 1) {
+      contingency_table <- table(
+        Matrix::colSums(object@assays$RNA@counts[gene, ] > 0) == length(gene), 
+        object@active.ident == cluster
+      )
+    }
+    TP <- contingency_table[2, 2]; TN <- contingency_table[1, 1]
+    FP <- contingency_table[2, 1]; FN <- contingency_table[1, 2]
+    J <- (TP/(TP+FN)) + (TN/(TN+FP)) - 1
+    return(data.frame(
+      "gene" = paste(gene, collapse = ", "), "cluster" = cluster,
+      "TP" = TP, "TN" = TN, "FP" = FP, "FN" = FN, "J" = J
+    ))
+  }
+  # function to generate gene lists by cluster and n
+  cluster_test <- function(clstr, n) {
+    print(paste("Testing cluster", clstr, "|", n, "gene combinations",
+                "(", format(Sys.time(), '%H:%M'), ")"))
+    genes <- expand.grid(rep(list(filter(markers, cluster == clstr)$gene), n))
+    if (n > 1) { # remove rows with identical values & duplicate values
+      genes <- genes[apply(genes, 1, function(x) length(unique(x)) == length(x)), ]
+      genes <- genes[!duplicated(t(apply(genes, 1, sort))), ]
+    }
+    if (nrow(genes) > 0) {
+      result <- apply(genes, 1, function(x) gene_test(x, clstr)) %>% bind_rows()
+      return(result)
+    } else { 
+      return(NULL) 
     }
   }
-  # make final name
-  df <- mutate(df, "name" = paste(cluster, marker, sep = ".")) %>%
-    mutate(name = factor(name, levels = name))
-  return(df)
+  # run on all clusters for all n values
+  result <- expand.grid(unique(markers$cluster), seq(n))
+  result <- apply(result, 1, function(x) cluster_test(x["Var1"], x["Var2"]))
+  result <- bind_rows(result)
+  result <- arrange(result, desc(J))
+  return(result)
+}
+
+# - Name clusters -------------------------------------------------------------
+name_clusters <- function(object, markers, other_pct = 0.2, 
+                          only_annotated = FALSE) {
+  # get informative genes based on TP/TN/FP/FN metrics
+  markers <- filter(markers, p_val_adj < 0.05 & pct.2 < other_pct)
+  info_genes <- get_informative_genes(object, markers)
+  if (only_annotated) {
+    annotation <- read_csv("~/Programs/dropseq3/data/annotation.csv")
+    annotation <- filter(annotation, rowSums(annotation[,2:ncol(annotation)]) > 0)
+    info_genes <- filter(info_genes, gene %in% annotation$gene)
+  }
+  info_genes <- info_genes %>% group_by(cluster) %>% slice(1) %>% ungroup()
+  info_genes <- select(info_genes, cluster, gene)
+  info_genes <- mutate(info_genes, "name" = paste(cluster, gene, sep = "."))
+  info_genes <- mutate(info_genes, name = factor(name, levels = name))
+  return(info_genes)
 }
