@@ -160,7 +160,7 @@ integrate_data <- function(object) {
 
 # - Run scran normalize -------------------------------------------------------
 run_scran_normalize <- function(object) {
-  print(paste("Normalizing data with scran", package.version("scran"), "..."))
+  print(paste("Normalizing data with scran", packageVersion("scran"), "..."))
   library(scran)
   sce <- SingleCellExperiment(assays = list("counts" = object@assays$RNA@counts))
   print("Running dimension reduction ...")
@@ -177,9 +177,11 @@ run_scran_normalize <- function(object) {
 normalize_data <- function(object, method = "TPM", batch = NULL) {
   if (method == "scran") {
     if (!is.null(batch)) {
+      clusters <- levels(object@active.ident)
       object <- SplitObject(object, batch)
       object <- map(object, run_scran_normalize)
       object <- merge(object[[1]], object[2:length(object)])
+      object@active.ident <- factor(object@active.ident, levels = clusters)
     } else {
       object <- run_scran_normalize(object)
     }
