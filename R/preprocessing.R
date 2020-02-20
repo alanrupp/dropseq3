@@ -158,16 +158,46 @@ integrate_data <- function(object) {
   return(object)
 }
 
+# - Run scran normalize -------------------------------------------------------
+run_scran_normalize <- function(object) {
+  print(paste("Normalizing data with scran", package.version("scran"), "..."))
+  library(scran)
+  sce <- SingleCellExperiment(assays = list("counts" = object@assays$RNA@counts))
+  print("Running dimension reduction ...")
+  clusters <- quickCluster(sce)
+  print("Computing sum factors ...")
+  sce <- computeSumFactors(sce, clusters = clusters)
+  print("Log normalizing counts ...")
+  sce <- scater::logNormCounts(sce)
+  object@assays$RNA@data <- logcounts(sce)
+  return(object)
+}
 
 # - Normalize data ----------------------------------------------------------
-normalize_data <- function(object, method = "TPM", assay = "RNA") {
-  mtx <- slot(object@assays[[assay]], "counts")
-  if (method == "TPM") {
+normalize_data <- function(object, method = "TPM", batch = NULL) {
+  if (method == "scran") {
+    if (!is.null(batch)) {
+      object <- SplitObject(object, batch)
+      object <- map(object, run_scran_normalize)
+      object <- merge(object[[1]], object[2:length(object)])
+    } else {
+      object <- run_scran_normalize(object)
+    }
+  } else if (method == "sctransform") {
+    library(sctransform)
+    object$log_umi_per_gene <- log10(mini$nCount_RNA / mini$nFeature_RNA)
+    vst_out <- vst(object@assays$RNA@counts, 
+                   cell_attr = object@meta.data, 
+                   latent_var = 'log_umi_per_gene', 
+                   batch_var = batch)
+    object@assays$RNA@data <- vst_out$y
+  } else if (method == "TPM") {
     # median UMI counts
+    mtx <- slot(object@assays[[assay]], "counts")
     med <- median(Matrix::colSums(mtx))
     mtx <- log1p(apply(mtx, 2, function(x) x / sum(x)) * med)
+    object@assays$RNA@data <- Matrix::Matrix(mtx, sparse = TRUE)
   }
-  slot(object@assays[[assay]], "data") <- Matrix::Matrix(mtx, sparse = TRUE)
   gc(verbose = FALSE)
   return(object)
 }
