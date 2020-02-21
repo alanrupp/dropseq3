@@ -257,100 +257,58 @@ heatmap_block <- function(object, genes = NULL, cells = NULL,
 
 
 # - Violin plot ---------------------------------------------------------------
-violin_plot <- function(object, genes, tx = NULL, clusters = NULL, 
-                        jitter = TRUE, stacked = FALSE, order_genes = FALSE,
-                        n_col = NULL, flip = FALSE, void = FALSE, 
-                        order_clusters = FALSE,
-                        colors = NULL) {
-  if (is.null(clusters)) {
-    clusters <- sort(unique(object@active.ident))
+violin_plot <- function(object, genes, x = "cluster", group = NULL,
+                        fill = NULL, facet = NULL, data = "data", 
+                        clusters = NULL, n_col = 1, jitter = FALSE,
+                        colors = NULL, void = FALSE, flip = FALSE,
+                        order_genes = TRUE) {
+  # get data
+  object$cluster <- object@active.ident
+  meta <- data.frame("na" = matrix(NA, nrow = ncol(slot(object@assays$RNA, data))))
+  meta[, x] <- object@meta.data[, x]
+  meta <- select(meta, -na)
+  if (!is.null(group)) { meta[, group] <- object@meta.data[, group] }
+  if (!is.null(fill)) { meta[, fill] <- object@meta.data[, fill] }
+  if (!is.null(facet)) { meta[, facet] <- object@meta.data[, facet] }
+  if (is.null(colors) & is.null(fill)) { 
+    colors <- gg_color_hue(length(unique(meta[, x]))) 
+  } else if (is.null(colors)) {
+    colors <- gg_color_hue(length(unique(meta[, fill]))) 
   }
-  if (is.null(colors)) {
-    colors <- gg_color_hue(length(clusters))
-  }
-  
-  # check that genes & clusters are in object
-  genes <- genes[genes %in% rownames(object@assays$RNA@data)]
-  clusters <- clusters[clusters %in% object@active.ident]
-  
-  # function to grab cells by treatment
-  grab_cells <- function(clusters) {
-    names(object@active.ident)[object@active.ident %in% clusters]
-  }
-  
-  # grab data using input cells
-  if (length(genes) == 1) {
-    df <- object@assays$RNA@data[genes, grab_cells(clusters)] %>%
-      as.matrix() %>% t() %>% as.data.frame()
-    rownames(df) <- genes
-  } else {
-    df <- object@assays$RNA@data[genes, grab_cells(clusters)] %>%
-      as.matrix() %>% as.data.frame()
-  }
-  
-  # make tidy
-  df <- df %>%
-    rownames_to_column("gene") %>%
-    gather(-gene, key = "cell", value = "Counts")
-  
-  if (order_genes == TRUE) {
-    df <- mutate(df, gene = factor(gene, levels = genes))
-  }
-  
-  # add cluster info
-  cluster_df <- data.frame("cell" = names(object@active.ident),
-                           "Cluster" = object@active.ident)
-  df <- left_join(df, cluster_df, by = "cell")
-  
-  if (order_clusters == TRUE) {
-    df <- mutate(df, Cluster = factor(Cluster, levels = clusters))
-  }
-  
-  # plot ------------
-  # add treatment info
-  if (!is.null(tx)) {
-    tx_df <- data.frame("Treatment" = object@meta.data$treatment) %>%
-      rownames_to_column("cell") %>%
-      filter(Treatment %in% tx)
-    df <- inner_join(df, tx_df, by = "cell") %>%
-      mutate(Treatment = factor(Treatment, levels = tx))
-    plt <- ggplot(df, aes(x = Treatment, y = Counts, fill = Treatment)) +
-      facet_wrap(~Cluster)
-  } else {
-    plt <- ggplot(df, aes(x = Cluster, y = Counts, fill = Cluster))
-  }
-  
-  # generic plot attributes
-  plt <- plt + 
-    geom_violin(show.legend = FALSE, scale = "width", adjust = 1) +
-    scale_fill_manual(values = colors) +
-    theme_bw() +
-    scale_y_continuous(expand = c(0,0)) +
-    theme(panel.grid = element_blank())
-  
-  # add jitter
-  if (jitter == TRUE) {
-    plt <- plt + geom_jitter(show.legend = FALSE, height = 0, alpha = 0.2,
-                             stroke = 0)
-  }
-  
-  # facet wrap for multiple genes or multiple genes + treatments
   if (length(genes) > 1) {
-    if (!is.null(tx)) {
-      plt <- plt + facet_wrap(~gene + Cluster, scales = "free_y", ncol = n_col)
-    } else {
-      plt <- plt + facet_wrap(~gene, scales = "free_y", ncol = n_col)
-    }
+    df <- data.frame(t(as.matrix(slot(object@assays$RNA, data)[genes, ])))
+    df <- bind_cols(df, meta)
+    df <- gather(df, 1:length(genes), key = "gene", value = "y")
+  } else {
+    df <- data.frame("y" = slot(object@assays$RNA, data)[genes, ], "gene" = genes)
+    df <- bind_cols(meta, df)
   }
-  
-  if (void == TRUE) {
-    plt <- plt + theme_void()
+  if (order_genes) { df <- mutate(df, gene = factor(gene, levels = genes)) }
+  # filter non-selected clusters
+  if (!is.null(clusters)) { df <- filter(df, cluster %in% clusters) }
+  # plot
+  p <- ggplot(df, aes(x = !!sym(x), y = y, group = group))  +
+    theme_classic() +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, NA)) +
+    xlab(x) + ylab("Normalized expression") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+    scale_fill_manual(values = colors)
+  if (is.null(fill)) {
+    p <- p + geom_violin(scale = "width", aes(fill = !!sym(x)), show.legend = FALSE)
+  } else {
+    p <- p + geom_violin(scale = "width", aes(fill = !!sym(fill)))
   }
-  if (flip == TRUE) {
-    plt <- plt + coord_flip()
+  if (is.null(facet)) {
+    p <- p + facet_wrap(~ gene, scales = "free_y", ncol = n_col)
+  } else {
+    p <- p + facet_wrap(~ vars(!!sym(facet), gene), scales = "free_y", ncol = n_col)
   }
-  
-  return(plt)
+  if (jitter) {
+    p <- p + geom_jitter(width = 0.4, height = 0, alpha = 0.4, stroke = 0)
+  }
+  if (void) { p <- p + theme_void() }
+  if (flip) { p <- p + coord_flip() }
+  return(p)
 }
 
 
