@@ -174,7 +174,7 @@ run_scran_normalize <- function(object) {
 }
 
 # - Normalize data ----------------------------------------------------------
-normalize_data <- function(object, method = "TPM", batch = NULL) {
+normalize_data <- function(object, method = "scran", batch = NULL) {
   if (method == "scran") {
     if (!is.null(batch)) {
       clusters <- levels(object@active.ident)
@@ -187,9 +187,10 @@ normalize_data <- function(object, method = "TPM", batch = NULL) {
     }
   } else if (method == "sctransform") {
     library(sctransform)
-    object$log_umi_per_gene <- log10(mini$nCount_RNA / mini$nFeature_RNA)
+    metadata <- object@meta.data
+    metadata$log_umi_per_gene <- log10(metadata$nCount_RNA/metadata$nFeature_RNA)
     vst_out <- vst(object@assays$RNA@counts, 
-                   cell_attr = object@meta.data, 
+                   cell_attr = metadata, 
                    latent_var = 'log_umi_per_gene', 
                    batch_var = batch)
     object@assays$RNA@data <- vst_out$y
