@@ -34,9 +34,7 @@ summarize_data <- function(object, genes, clusters = NULL) {
   df <- left_join(df, data.frame("barcode" = names(object@active.ident),
                                  "cluster" = object@active.ident), by = "barcode")
   
-  # filter by selected clusters
-  df <- filter(df, cluster %in% clusters)
-  
+  if (!is.null(clusters)) {  df <- filter(df, cluster %in% clusters) }
   # summarize
   df <- df %>%
     group_by(gene, cluster) %>%
@@ -138,14 +136,14 @@ heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
 }
 
 # - Clip matrix at upper limit ------------------------------------------------
-clip_matrix <- function(matrix, limit) {
-  cols <- colnames(matrix); rows <- rownames(matrix)
+clip_matrix <- function(mtx, limit) {
+  cols <- colnames(mtx); rows <- rownames(mtx)
   clip_fun <- function(x) {
     ifelse(x > limit, limit, ifelse(x < -limit, -limit, x))
   }
-  matrix <- structure(vapply(matrix, clip_fun, numeric(1)), dim = dim(matrix))
-  colnames(matrix) <- cols; rownames(matrix) <- rows
-  return(matrix)
+  mtx <- apply(mtx, c(1, 2), clip_fun)
+  colnames(mtx) <- cols; rownames(mtx) <- rows
+  return(mtx)
 }
 
 # - Heatmap block -------------------------------------------------------------
@@ -261,7 +259,7 @@ violin_plot <- function(object, genes, x = "cluster", group = NULL,
                         fill = NULL, facet = NULL, data = "data", 
                         clusters = NULL, n_col = 1, jitter = FALSE,
                         colors = NULL, void = FALSE, flip = FALSE,
-                        order_genes = TRUE) {
+                        order_genes = TRUE, stacked = FALSE) {
   # get data
   object$cluster <- object@active.ident
   meta <- data.frame("na" = matrix(NA, nrow = ncol(slot(object@assays$RNA, data))))
@@ -308,79 +306,16 @@ violin_plot <- function(object, genes, x = "cluster", group = NULL,
   }
   if (void) { p <- p + theme_void() }
   if (flip) { p <- p + coord_flip() }
+  if (stacked) {
+    p <- p + facet_wrap(~ gene, scales = "free_y", ncol = 1,
+                        strip.position = "left") +
+      scale_y_continuous(position = "right", limits = c(0, NA),
+                         expand = c(0, 0)) +
+      theme(strip.background = element_blank(),
+            axis.ticks.y = element_blank()) +
+      ylab(NULL)
+  }
   return(p)
-}
-
-
-# - Stacked violin plot -----------------------------------------------------
-stacked_violin <- function(object, genes, cluster_order = NULL,
-                           colors = NULL, angle_names = FALSE) {
-  # grab cluster order
-  if (is.null(cluster_order)) {
-    clusters <- sort(unique(object@active.ident))
-  } else {
-    clusters <- factor(
-      unique(object@active.ident[object@active.ident %in% cluster_order]),
-      levels = cluster_order)
-  }
-  
-  # make plots for all but last one
-  data_plots <- map(genes, 
-                  ~ violin_plot(object, genes = .x, 
-                                jitter = FALSE, void = TRUE,
-                                colors = colors)
-                  )
-  
-  # make plots for all gene names for left-hand side
-  gene_plots <- 
-    map(genes, ~ ggplot(data.frame("gene" = .x),
-           aes(x = 0, y = 0, label = gene)) +
-          geom_text(hjust = "inward", color = "black") +
-          theme_void()
-    )
-  
-  # combine into one list
-  plots <- list()
-  for (i in seq(length(genes))) {
-    plots <- c(plots, gene_plots[i])
-    plots <- c(plots, data_plots[i])
-  }
-  
-  # make empty square for bottom
-  void_plot <- 
-    ggplot(data.frame("a" = ""), aes(x = 0, y = 0, label = a)) +
-    geom_text() + 
-    theme_void()
-  plots[[length(plots)+1]] <- void_plot
-  
-  # make x axis label plot
-  cluster_plot <- 
-    ggplot(
-      data.frame("cluster" = sort(unique(object@active.ident)),
-                 "position" = seq(length(unique(object@active.ident)))),
-      aes(x = position, y = 1, label = cluster)) +
-    theme_void() +
-    scale_x_continuous(expand = c(0, 0), 
-                       limits = c(0.5, 
-                                  length(unique(object@active.ident)) + 0.5)) +
-    scale_y_continuous(expand = c(0, 0)) +
-    xlab(NULL) + ylab(NULL)
-  if (angle_names) {
-    cluster_plot <- cluster_plot +
-      geom_text(angle = 45, hjust = 1, vjust = 1)
-  } else {
-    cluster_plot <- cluster_plot +
-      geom_text(hjust = 0.5)
-  }
-  plots[[length(plots)+1]] <- cluster_plot
-  
-  # combine into one plot_grid
-  cowplot::plot_grid(plotlist = plots, 
-                     ncol = 2, 
-                     rel_heights = c(rep(0.95/length(genes),
-                                         length(genes)), 0.05),
-                     rel_widths = c(0.1, 0.9),
-                     align = "h")
 }
 
 
