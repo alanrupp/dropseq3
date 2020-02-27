@@ -13,9 +13,9 @@ get_cells <- function(object, cluster, not = FALSE) {
 
 # - Cluster means -------------------------------------------------------------
 cluster_means <- function(object, genes = NULL, assay = "RNA", 
-                          data_slot = "scale.data") {
+                          data = "scale.data") {
   clusters <- sort(unique(object@active.ident))
-  mtx <- slot(slot(object, "assays")[[assay]], data_slot)
+  mtx <- slot(object@assays[[assay]], data)
   if (is.null(genes)) {
     genes <- rownames(mtx)
   } else {
@@ -31,9 +31,14 @@ cluster_means <- function(object, genes = NULL, assay = "RNA",
 }
 
 # - Order clusters by gene list -----------------------------------------------
-order_clusters <- function(object, genes = NULL, scale = TRUE) {
+order_clusters <- function(object, genes = NULL, max_expr = 2, scale = TRUE) {
   mean_values <- cluster_means(object, genes)
-  tree <- hclust(dist(t(mean_values)))
+  mean_values <- clip_matrix(mean_values, max_expr)
+  if (scale) {
+    tree <- hclust(dist(t(mean_values)))
+  } else {
+    tree <- hclust(dist(mean_values))
+  }
   return(tree$labels[tree$order])
 }
 
@@ -47,7 +52,7 @@ pca <- function(object) {
     object <- JackStraw(object, dims = pcs)
     object <- ScoreJackStraw(object, dims = 1:pcs)
     insig <- which(
-      object@reductions$pca@jackstraw@overall.p.values[,"Score"] >= 0.05
+      object@reductions$pca@jackstraw@overall.p.values[, "Score"] >= 0.05
     )
     if (length(insig) != 0) {
       break()
@@ -108,8 +113,9 @@ cluster <- function(object, assay = "RNA", seed = NA) {
   }
   pcs <- object@reductions$pca@misc$sig_pcs
   # Find neighbors and cluster and different resolutions
-  print("Finding nearest neighbors")
-  object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE)
+  k <- round(sqrt(ncol(object@assays$RNA@counts)), 0)
+  print(paste("Finding nearest neighbors using k =", k))
+  object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE, k.param = k)
   clusters <- choose_resolution(object, assay = assay,
                                 resolutions = seq(0.2, 1, by = 0.2))
   object@active.ident <- clusters
@@ -947,80 +953,105 @@ cellex <- function(counts, clusters) {
 
 # - Traverse tree -------------------------------------------------------------
 traverse_tree <- function(object, genes = NULL, assay = "RNA",
-                          data = "data", groupby = NULL) {
+                          data = "data", groupby = NULL,
+                          max_expr = 2) {
   # grab mean data for each cluster
-  if (is.null(genes)) { genes <- rownames(slot(vmh[[assay]], data)) }
-  means <- cluster_means(vmh, genes, assay = assay, data = data)
-  
+  if (is.null(genes)) { genes <- rownames(slot(object[[assay]], data)) }
+  means <- cluster_means(object, genes, assay = assay, data = data)
+  means <- clip_matrix(means, max_expr)
   # generate tree
   tree <- hclust(dist(t(means)))
-  
+  max_clusters <- length(unique(object@active.ident))
   # find max "DE-ness" for every cut
   # this is the max -log10 p val for every gene
   get_de <- function(cut) {
+    print(paste("--- Testing", cut, "clusters of", max_clusters, "---"))
     clusters <- cutree(tree, cut)
     if (is.null(groupby)) {
       markers <- map(
         unique(clusters),
-        ~ find_markers(vmh, 
+        ~ find_markers(object, 
                        cluster = names(clusters)[clusters == .x],
-                       other = names(clusters)[clusters != .x])
+                       other = names(clusters)[clusters != .x],
+                       genes = genes)
       )
     } else {
       markers <- map(
         unique(clusters),
-        ~ find_conserved_markers(vmh, 
+        ~ find_conserved_markers(object, 
                                  cluster = names(clusters)[clusters == .x],
-                                 groupby,
-                                 other = names(clusters)[clusters != .x])
+                                 groupby = groupby,
+                                 other = names(clusters)[clusters != .x],
+                                 genes = genes)
       )
     }
-    
     # keep only the lowest p value for each gene
     markers %>% bind_rows() %>%
+      filter(p_val_adj < 0.05) %>%
       mutate(p_val_adj = -log10(p_val_adj)) %>%
       group_by(gene) %>%
       arrange(desc(p_val_adj)) %>%
-      slice(1) %>% ungroup() %>%
+      dplyr::slice(1) %>% ungroup() %>%
       summarize("total" = sum(p_val_adj)) %>%
       .$total
   }
-  
   # find DE score for all levels of tree
-  max_clusters <- length(unique(object@active.ident))
   result <- map_dbl(2:max_clusters, get_de)
   names(result) <- 2:max_clusters
-  return(result)
+  print(paste("Scores:", result))
+  return(cutree(tree, names(result)[result == max(result)]))
+}
+
+# - Extend table --------------------------------------------------------------
+# extend table that drops row/column of all 0 values
+extend_table <- function(ct, n = 2) {
+  to_add <- rep(0, n)
+  if (ncol(ct) < n) {
+    if ("TRUE" %in% colnames(ct)) {
+      ct <- cbind(to_add, as.matrix(ct))
+    } else {
+      ct <- cbind(as.matrix(ct), to_add)
+    }
+  } else if (nrow(ct) < n) {
+    if ("TRUE" %in% rownames(ct)) {
+      ct <- rbind(to_add, as.matrix(ct))
+    } else {
+      ct <- rbind(as.matrix(ct), to_add)
+    }
+  }
+  return(ct)
 }
 
 # - Get informative genes -----------------------------------------------------
 get_informative_genes <- function(object, markers, n = 1, clusters = NULL,
-                                  p_val_max = 0.05, n_genes = 50) {
-  # filter the markers data.frame
-  if (!is.null(clusters)) {
-    markers <- filter(markers, cluster %in% clusters)
-  }
+                                  p_val_max = 0.05, n_genes = 50,
+                                  other_pct = 0.2) {
+  # filter the markers data.frame by user input to get top `n_genes` genes
+  cluster_levels <- levels(markers$cluster)
+  if (!is.null(clusters)) { markers <- filter(markers, cluster %in% clusters) }
+  markers <- filter(markers, pct.1 > pct.2)
+  markers <- filter(markers, pct.2 < other_pct)
   markers <- filter(markers, p_val_adj < p_val_max)
-  markers <- markers %>% group_by(cluster) %>%
-    arrange(desc(pct.1 - pct.2)) %>% slice(1:n_genes)
-  if (nrow(markers) == 0) {
-    stop("Not enough markers")
-  }
+  markers <- markers %>% 
+    group_by(cluster) %>%
+    arrange(desc(pct.1 - pct.2)) %>% 
+    dplyr::slice(1:n_genes)
+  if (nrow(markers) == 0) { stop("Not enough markers") }
   # function to return gene TP, TN, FP, FN, and J score
   gene_test <- function(gene, cluster) {
     if (length(gene) == 1) {
-      contingency_table <- table(
-        object@assays$RNA@counts[gene, ] > 0, 
-        object@active.ident == cluster
-      )
+      ct <- table(object@assays$RNA@counts[gene, ] > 0, 
+                  object@active.ident == cluster)
     } else if (length(gene) > 1) {
-      contingency_table <- table(
+      ct <- table(
         Matrix::colSums(object@assays$RNA@counts[gene, ] > 0) == length(gene), 
         object@active.ident == cluster
       )
     }
-    TP <- contingency_table[2, 2]; TN <- contingency_table[1, 1]
-    FP <- contingency_table[2, 1]; FN <- contingency_table[1, 2]
+    # catch if one category has all zeros
+    if (nrow(ct) != 2 | ncol(ct) != 2) { ct <- extend_table(ct, n = 2) }
+    # calculate true/false positives and negatives
+    TP <- ct[2, 2]; TN <- ct[1, 1]; FP <- ct[2, 1]; FN <- ct[1, 2]
     J <- (TP/(TP+FN)) + (TN/(TN+FP)) - 1
     return(data.frame(
       "gene" = paste(gene, collapse = ", "), "cluster" = cluster,
@@ -1029,42 +1060,53 @@ get_informative_genes <- function(object, markers, n = 1, clusters = NULL,
   }
   # function to generate gene lists by cluster and n
   cluster_test <- function(clstr, n) {
-    print(paste("Testing cluster", clstr, "|", n, "gene combinations",
-                "(", format(Sys.time(), '%H:%M'), ")"))
-    genes <- expand.grid(rep(list(filter(markers, cluster == clstr)$gene), n))
+    print(paste("Testing cluster", clstr, "|", n, "gene combinations"))
+    genes <- expand.grid(rep(list(dplyr::filter(markers, cluster == clstr)$gene), n))
     if (n > 1) { # remove rows with identical values & duplicate values
       genes <- genes[apply(genes, 1, function(x) length(unique(x)) == length(x)), ]
       genes <- genes[!duplicated(t(apply(genes, 1, sort))), ]
     }
     if (nrow(genes) > 0) {
-      result <- apply(genes, 1, function(x) gene_test(x, clstr)) %>% bind_rows()
-      return(result)
+      result <- apply(genes, 1, function(x) gene_test(x, clstr))
+      result <- map(result, ~ mutate(.x, gene = as.character(gene)))
+      return(bind_rows(result))
     } else { 
-      return(NULL) 
+      return(data.frame("gene" = NA, "cluster" = cluster,
+                        "TP" = NA, "TN" = NA, "FP" = NA, "FN" = NA, "J" = NA
+      )) 
     }
   }
   # run on all clusters for all n values
   result <- expand.grid(unique(markers$cluster), seq(n))
   result <- apply(result, 1, function(x) cluster_test(x["Var1"], x["Var2"]))
   result <- bind_rows(result)
-  result <- arrange(result, desc(J))
+  result <- dplyr::arrange(result, desc(J))
+  result <- result %>% complete(cluster, fill = list("gene" = ""))
   return(result)
 }
 
 # - Name clusters -------------------------------------------------------------
-name_clusters <- function(object, markers, other_pct = 0.2, 
+name_clusters <- function(object, markers, other_pct = 0.2, n = 1,
                           only_annotated = FALSE) {
   # get informative genes based on TP/TN/FP/FN metrics
-  markers <- filter(markers, p_val_adj < 0.05 & pct.2 < other_pct)
-  info_genes <- get_informative_genes(object, markers)
+  cluster_levels <- levels(markers$cluster)
+  info_genes <- get_informative_genes(object, markers, n = n,
+                                      other_pct = other_pct)
   if (only_annotated) {
     annotation <- read_csv("~/Programs/dropseq3/data/annotation.csv")
-    annotation <- filter(annotation, rowSums(annotation[,2:ncol(annotation)]) > 0)
-    info_genes <- filter(info_genes, gene %in% annotation$gene)
+    annotation <- dplyr::filter(annotation, rowSums(annotation[,2:ncol(annotation)]) > 0)
+    info_genes <- dplyr::filter(info_genes, gene %in% annotation$gene)
   }
-  info_genes <- info_genes %>% group_by(cluster) %>% slice(1) %>% ungroup()
+  info_genes <- mutate(info_genes, cluster = factor(cluster, levels = cluster_levels))
+  info_genes <- info_genes %>% group_by(cluster) %>% dplyr::slice(1) %>% ungroup()
   info_genes <- select(info_genes, cluster, gene)
   info_genes <- mutate(info_genes, "name" = paste(cluster, gene, sep = "."))
   info_genes <- mutate(info_genes, name = factor(name, levels = name))
+  if (n > 1) {
+    info_genes <- info_genes %>% mutate(
+      "name" = ifelse(str_detect(name, "\\,"), str_replace(name, "\\, ", "_"),
+                      name))
+  }
   return(info_genes)
 }
+
