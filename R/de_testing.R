@@ -689,55 +689,18 @@ find_doublet_clusters <- function(object, doublets) {
   }
 }
 
-
-# - edgeR for treatment effects -----------------------------------------------
-edgeR_test <- function(object, treatment) {
-  # get data
-  mtx <- object@assays$RNA@counts
-  clusters <- object@active.ident
-  tx <- paste(object@meta.data[, treatment], clusters, sep = "_")
-  
-  # set up edgeR
-  library(edgeR)
-  y <- DGEList(counts = mtx, group = tx)
-  y <- calcNormFactors(y)
-  design <- model.matrix(~ 0 + tx)
-  colnames(design) <- levels(tx)
-  y <- estimateDisp(y, design)
-  
-  # make contrasts
-  contrast_list <- c()
-  contrasts <- makeContrasts(
-    "0" = CNO_0 - Saline_0,
-    "1" = CNO_1 - Saline_1,
-    "2" = CNO_2 - Saline_2,
-    "3" = CNO_3 - Saline_3,
-    "4" = CNO_4 - Saline_4,
-    "5" = CNO_5 - Saline_5,
-    "6" = CNO_6 - Saline_6,
-    "7" = CNO_7 - Saline_7,
-    "8" = CNO_8 - Saline_8,
-    "9" = CNO_9 - Saline_9,
-    "10" = CNO_10 - Saline_10,
-    "11" = CNO_11 - Saline_11,
-    levels = design
-  )
-  
-  # perform LRT
-  fit <- glmFit(y, design)
-  de <- function(coef) {
-    lrt <- glmLRT(fit, contrast = contrasts[, coef])
-    topTags(lrt, n = nrow(mtx))
+# - Calculate Youden's J ------------------------------------------------------
+calc_youden <- function(contingency_table, return_all = FALSE) {
+  TP <- contingency_table[2, 2]
+  TN <- contingency_table[1, 1]
+  FP <- contingency_table[2, 1]
+  FN <- contingency_table[1, 2]
+  J <- (TP/(TP+FN)) + (TN/(TN+FP)) - 1
+  if (return_all) {
+    return(c("TP" = TP, "TN" = TN, "FP" = FP, "FN" = FN, "J" = J))
+  } else {
+    return(c("J" = J))
   }
-  result <- map(colnames(contrasts), de)
-  names(result) <- colnames(contrasts)
-  result <- map(result, as.data.frame)
-  result <- map(result, ~ rownames_to_column(.x, "gene"))
-  
-  map(result, ~ sum(.x$FDR < 0.05, na.rm = TRUE))
-  result <- map(seq(length(result)),
-                ~ mutate(result[[.x]], "cluster" = names(result)[.x]))
-  result <- bind_rows(result)
 }
 
 # - Grab clusters by type ------------------------------------------------------
@@ -834,19 +797,29 @@ choose_coclustering_groups <- function(co, max_clusters = 50) {
   return(clusters)
 }
 
+# - Check that a gene is in a given assay & dataset ---------------------------
+check_gene <- function(object, gene, assay = "RNA", data = "data") {
+  gene %in% rownames(slot(object@assays[[assay]], data))
+}
+
 # - Calculate p_val, avg_logFC, pct.1, and pct.2 for a gene -------------------
-gene_test <- function(object, gene, cells_in, cells_out) {
+gene_test <- function(object, gene, cells_in, cells_out, test = "wilcox") {
   if (length(cells_in) == 0 | length(cells_out) == 0) {
     warning("Not enough cells")
     return(c("p_val" = NA, "avg_logFC" = NA, "pct.1" = NA, "pct.2" = NA))
   }
-  p_val <- wilcox.test(
-    object@assays$RNA@data[gene, cells_in], 
-    object@assays$RNA@data[gene, cells_out], 
-    alternative = "greater")$p.value
-  if (p_val == 1) {
-    p_val <- 1-10^-9
+  if (test == "wilcox") {
+    if (check_gene(object, gene)) {
+      p_val <- wilcox.test(
+        object@assays$RNA@data[gene, cells_in], 
+        object@assays$RNA@data[gene, cells_out], 
+        alternative = "greater")$p.value
+    } else {
+      warning(paste(gene, "not in dataset"))
+      return(c("p_val" = NA, "avg_logFC" = NA, "pct.1" = NA, "pct.2" = NA))
+    }
   }
+  if (p_val == 1) { p_val <- 1-10^-9 }
   c("p_val" = p_val,
     "avg_logFC" = round(log(mean(object@assays$RNA@data[gene, cells_in])) -
                         log(mean(object@assays$RNA@data[gene, cells_out])), 3),
@@ -862,9 +835,7 @@ find_conserved_markers <- function(object, cluster, groupby,
                                    other = NULL, remove_insig = TRUE,
                                    genes = NULL, progress_bar = TRUE) {
   groups <- unique(object@meta.data[, groupby])
-  if (is.null(genes)) {
-    genes <- rownames(object@assays$RNA@counts)
-  }
+  if (is.null(genes)) { genes <- rownames(object@assays$RNA@counts) }
   print(paste0("Testing cluster ", cluster, ": ", 
                length(genes), " genes from ",
                sum(object@active.ident == cluster), " cells across ",
@@ -892,7 +863,7 @@ find_conserved_markers <- function(object, cluster, groupby,
     result <- sapply(groups, function(x) 
       gene_test(object, gene, get_cells(x), get_other(x))
     )
-    if (sum(is.na(result[1,]) == length(result[1,]))) {
+    if (sum(is.na(result[1, ]) == length(result[1, ]))) {
       return(c("p_val" = NA, rowMeans(result[2:4,], na.rm = TRUE)))
     } else if (sum(!is.na(result[1,])) == 1) {
       return(c("p_val" = result[1,][!is.na(result[1,])], 
@@ -915,9 +886,7 @@ find_conserved_markers <- function(object, cluster, groupby,
            "cluster" = paste(cluster, collapse = ", "),
            "gene" = genes) %>%
     arrange(p_val_adj)
-  if (remove_insig) {
-    mtx <- filter(mtx, p_val_adj < 0.05)
-  }
+  if (remove_insig) { mtx <- filter(mtx, p_val_adj < 0.05) }
   gc(verbose = FALSE)
   return(mtx)
 }
@@ -925,9 +894,7 @@ find_conserved_markers <- function(object, cluster, groupby,
 # - Find all conserved markers -----------------------------------------------
 find_all_conserved_markers <- function(object, groupby, remove_insig = TRUE,
                                        genes = NULL, progress_bar = FALSE) {
-  if (is.null(genes)) {
-    genes <- rownames(object@assays$RNA@counts)
-  }
+  if (is.null(genes)) { genes <- rownames(object@assays$RNA@counts) }
   clusters <- sort(unique(object@active.ident))
   result <- map(
     clusters, 
@@ -936,9 +903,7 @@ find_all_conserved_markers <- function(object, groupby, remove_insig = TRUE,
                              progress_bar = progress_bar)) %>%
     bind_rows() %>%
     mutate(p_val_adj = p.adjust(p_val, method = "BH"))
-  if (remove_insig) {
-    result <- filter(result, p_val_adj < 0.05)
-  }
+  if (remove_insig) { result <- filter(result, p_val_adj < 0.05) }
   gc(verbose = FALSE)
   return(result)
 }
@@ -1110,3 +1075,38 @@ name_clusters <- function(object, markers, other_pct = 0.2, n = 1,
   return(info_genes)
 }
 
+# - Make pseudobulk -----------------------------------------------------------
+make_pseudobulk <- function(object, treatment, batch) {
+  clusters <- sort(unique(object@active.ident))
+  get_cells <- function(tx, btch = NULL) {
+    rownames(object@meta.data)[object@meta.data[, treatment] == tx &
+                                 object@meta.data[, batch] == btch]
+  }
+  generate_matrix <- function(cluster) {
+    groups <- expand.grid(unique(object@meta.data[, treatment]), 
+                          unique(object@meta.data[, batch]))
+    mtx <- apply(groups, 1, function(x) 
+      Matrix::rowSums(object@assays$RNA@counts[ 
+        , intersect(names(object@active.ident)[object@active.ident == cluster],
+                    get_cells(x["Var1"], x["Var2"]))
+        ])
+    )
+    colnames(mtx) <- paste(groups[,1], groups[,2], sep = "_")
+    return(mtx)
+  }
+  mtx <- map(clusters, generate_matrix)
+  names(mtx) <- clusters
+  return(mtx)
+}
+
+# - Make pseudobulk metadata --------------------------------------------------
+make_pseudobulk_metadata <- function(pseudobulk) {
+  # make sure all colnames in pseudobulk matrix are the same
+  if (!all(apply(sapply(pseudobulk, colnames), 1, 
+                 function(x) length(unique(x)) == 1) == TRUE)) {
+    stop("Cluster matrices do not have consistent column names")
+  } else {
+    df <- data.frame("Group" = colnames(pseudobulk[[1]])) %>%
+      separate(Group, into = c("Treatment", "Batch"), sep = "_")
+  }
+}
