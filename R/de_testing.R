@@ -98,6 +98,7 @@ choose_resolution <- function(object, resolutions = NULL,
     } else {
       resolutions <- seq(max(resolutions), max(resolutions) + 1, by = 0.2)
     }
+    gc(verbose = FALSE)
   }
   # return clusters from max resolution 
   print(paste("Using resolution", best_width, "for clustering."))
@@ -198,10 +199,9 @@ find_expressed <- function(object, min_cells = 10, min_counts = 1) {
 
 # - Find markers ------------------------------------------------------------
 find_markers <- function(object, cluster, other = NULL, genes = NULL,
-                         remove_insig = TRUE) {
-  if (is.null(genes)) {
-    genes <- rownames(object@assays$RNA@counts)
-  }
+                         remove_insig = TRUE, progress_bar = TRUE,
+                         only_pos = TRUE) {
+  if (is.null(genes)) { genes <- rownames(object@assays$RNA@counts) }
   cells_in <- names(object@active.ident)[object@active.ident %in% cluster]
   if (is.null(other)) {
     print(paste("Calculating cluster", paste(cluster, collapse = ",")))
@@ -214,51 +214,60 @@ find_markers <- function(object, cluster, other = NULL, genes = NULL,
   
   # function to calculate gene attributes
   gene_test <- function(gene) {
-    c(wilcox.test(
-      object@assays$RNA@data[gene, cells_in], 
-      object@assays$RNA@data[gene, cells_out], 
-      alternative = "greater")$p.value,
-      round(log(mean(object@assays$RNA@data[gene, cells_in])) - 
-              log(mean(object@assays$RNA@data[gene, cells_out])), 3),
-      round(sum(object@assays$RNA@counts[gene, cells_in] > 0) / 
-              length(cells_in), 3),
-      round(sum(object@assays$RNA@counts[gene, cells_out] > 0) / 
-              length(cells_out), 3)
+    result <- c(
+      "avg_logFC" = round(log(mean(object@assays$RNA@data[gene, cells_in])) -
+                          log(mean(object@assays$RNA@data[gene, cells_out])), 
+                          3),
+      "pct.1" = round(sum(object@assays$RNA@counts[gene, cells_in] > 0) / 
+                        length(cells_in), 3),
+      "pct.2" = round(sum(object@assays$RNA@counts[gene, cells_out] > 0) /
+                        length(cells_out), 3)
     )
+    if (only_pos) {
+      if (result["avg_logFC"] > 0 & result["pct.1"] > result["pct.2"]) {
+        p_val <- wilcox.test(
+          object@assays$RNA@data[gene, cells_in], 
+          object@assays$RNA@data[gene, cells_out], 
+          alternative = "greater")$p.value
+      } else {
+        p_val <- 1-10^-9
+      }
+    } else {
+      p_val <- wilcox.test(
+        object@assays$RNA@data[gene, cells_in], 
+        object@assays$RNA@data[gene, cells_out], 
+        alternative = "greater")$p.value
+    }
+    return(c("p_val" = p_val, result))
   }
   
   # run on all genes
-  mtx <- pbapply::pbsapply(genes, gene_test)
-  mtx <- t(mtx)
+  if (progress_bar) { mtx <- pbapply::pbsapply(genes, gene_test) }
+  else { mtx <- sapply(genes, gene_test) }
   
   # adjust P value and export
-  mtx <- as.data.frame(mtx) %>% 
-    set_names("p_val", "avg_logFC", "pct.1", "pct.2") %>%
+  mtx <- as.data.frame(t(mtx)) %>% 
     mutate("p_val_adj" = p.adjust(p_val, method = "BH"),
            "cluster" = paste(cluster, collapse = ", "),
            "gene" = genes) %>%
     arrange(p_val_adj)
-  if (remove_insig) {
-    mtx <- filter(mtx, p_val_adj < 0.05)
-  }
+  if (remove_insig) { mtx <- filter(mtx, p_val_adj < 0.05) }
   gc(verbose = FALSE)
   return(mtx)
 }
 
 # - Find All Markers --------------------------------------------------------
-find_all_markers <- function(object, genes = NULL, remove_insig = TRUE) {
-  if (is.null(genes)) {
-    genes <- rownames(object@assays$RNA@counts)
-  }
+find_all_markers <- function(object, genes = NULL, remove_insig = FALSE,
+                             progress_bar = TRUE, only_pos = TRUE) {
+  if (is.null(genes)) { genes <- rownames(object@assays$RNA@data) }
   clusters <- sort(unique(object@active.ident))
   result <- map(
     clusters, 
-    ~ find_markers(object, .x, genes = genes, remove_insig = FALSE)) %>%
+    ~ find_markers(object, .x, genes = genes, remove_insig = FALSE,
+                   progress_bar = progress_bar, only_pos = only_pos)) %>%
     bind_rows() %>%
     mutate(p_val_adj = p.adjust(p_val, method = "BH"))
-  if (remove_insig) {
-    result <- filter(result, p_val_adj < 0.05)
-  }
+  if (remove_insig) { result <- filter(result, p_val_adj < 0.05) }
   gc(verbose = FALSE)
   return(result)
 }
@@ -541,13 +550,6 @@ find_unique_genes <- function(object, genes = NULL, clusters = NULL,
   return(result)
 }
 
-# - Eigengene ---------------------------------------------------------------
-eigengene <- function(object, genes) {
-  genes <- genes[genes %in% rownames(object@assays$RNA@scale.data)]
-  pca <- prcomp(t(object@assays$RNA@scale.data[genes, ]))
-  return(pca$x[,1])
-}
-
 # - deScore -------------------------------------------------------------------
 # calculate "deScore" as in Tasic et al. 2018
 deScore <- function(object, ident1, ident2) {
@@ -632,16 +634,28 @@ merge_clusters <- function(object, markers) {
 }
 
 
+# - Eigengene ---------------------------------------------------------------
+eigengene <- function(object, genes) {
+  # keep genes that have been scaled and are not NA in the scale.data slot
+  genes <- genes[genes %in% rownames(object@assays$RNA@scale.data)]
+  genes <- genes[
+    sapply(genes, function(x) sum(is.na(object@assays$RNA@scale.data[x, ])) == 0)
+    ]
+  pca <- prcomp(t(object@assays$RNA@scale.data[genes, ]))
+  return(pca$x[, 1])
+}
+
 # - Finding doublets ---------------------------------------------------------
 # Finding doublets based on the Tasic et al. Nature 2018 criteria
-find_doublets <- function(object, markers) {
+find_doublets <- function(object, markers, sd_threshold = 1) {
   # find eigengene for each cell for each set of cluster markers
-  eigengenes <-
-    map(unique(object@active.ident),
-        ~ eigengene(object, filter(markers, cluster == .x)$gene))
+  eigengenes <- map(
+    sort(unique(object@active.ident)),
+    ~ eigengene(object, filter(markers, cluster == .x)$gene)
+    )
+  # find cells that are >`threshold` SD above mean eigengene for >=2 clusters
   eigengenes <- map(eigengenes, scale)
-  members <- map(eigengenes, ~ .x[.x > 3, ])
-  members <- unlist(members)
+  members <- map(eigengenes, ~ .x[.x > sd_threshold, ]) %>% unlist()
   doublets <- names(members)[duplicated(members)]
   return(doublets)
 }
