@@ -310,9 +310,13 @@ violin_plot <- function(object, genes, x = "cluster", group = NULL,
     p <- p + facet_wrap(~ gene, scales = "free_y", ncol = 1,
                         strip.position = "left") +
       scale_y_continuous(position = "right", limits = c(0, NA),
-                         expand = c(0, 0)) +
+                         expand = c(0, 0), 
+                         breaks = seq(2, max(df$y), by = 2),
+                         labels = seq(2, max(df$y), by = 2)) +
       theme(strip.background = element_blank(),
-            axis.ticks.y = element_blank()) +
+            axis.ticks.y = element_blank(),
+            strip.text.y = element_text(angle = 180,
+                                        hjust = 1, vjust = 0.5)) +
       ylab(NULL)
   }
   return(p)
@@ -559,22 +563,6 @@ flamemap <- function(object, genes, cells = NULL, n_bars = 100,
   return(plt)
 }
 
-
-# - Eigengene plot ----------------------------------------------------------
-
-
-# - Plot resolutions ----------------------------------------------------------
-plot_resolutions <- function(object, assay = "integrated") {
-  if (assay == "integrated") {
-    
-  }
-  cowplot::plot_grid(
-    plotlist = map(resolutions,
-                   ~ DimPlot(neurons, group.by = paste0("integrated_snn_res.", .x))
-    ))
-}
-
-
 # - Plot GSEA scores ----------------------------------------------------------
 plot_gsea_scores <- function(gsea_scores, zeros = FALSE) {
   # set levels
@@ -594,21 +582,11 @@ plot_gsea_scores <- function(gsea_scores, zeros = FALSE) {
     gather(-group, key = "cluster", value = "score") %>%
     mutate(group = factor(group, levels = group_levels),
            cluster = factor(cluster, levels = cluster_levels))
-  
-  if (!zeros) {
-    zero_classes <- df %>%
-      group_by(group) %>%
-      summarize(frac = sum(score == 0) / n()) %>%
-      filter(frac == 1) %>%
-      .$group
-    df <- filter(df, !group %in% zero_classes)
-  }
-  
   # plot
   p <- ggplot(df, aes(x = cluster, y = fct_rev(group), fill = score)) +
     geom_tile(show.legend = FALSE) +
-    scale_fill_gradient(low = "white", high = "#009392", name = "Score",
-                        na.value = "white") +
+    scale_fill_gradient2(low = "#d0587e", mid = "white", high = "#009392",
+                         name = "Score", na.value = "white") +
     theme_void() +
     theme(axis.text = element_text(color = "black"),
           axis.text.y = element_text(hjust = 1))
