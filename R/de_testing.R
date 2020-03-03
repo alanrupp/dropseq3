@@ -64,23 +64,44 @@ pca <- function(object) {
   return(object)
 }
 
+# - Choose k neighbors -------------------------------------------------------
+choose_neighbors <- function(object, klim = c(20, NA)) {
+  if (is.na(klim[2])) { klim[2] <- sqrt(ncol(object@assays$RNA@counts)) }
+  k_vals <- seq(klim[1], klim[2], by = 10)
+  pcs <- object@reductions$pca@misc$sig_pcs
+  pipeline <- function(k) {
+    object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE, k.param = k)
+    FindClusters(object, resolution = 1, verbose = FALSE)@active.ident
+  }
+  clusters <- map(k_vals, pipeline)
+  # calc silhouettes for all k values
+  distances <- dist(object@reductions$pca@cell.embeddings[, 1:pcs])
+  calc_silhouettes <- function(cluster_results) {
+    sil <- cluster::silhouette(as.numeric(cluster_results), distances)
+    return(mean(sil[, 3]))
+  }
+  widths <- map_dbl(clusters, calc_silhouettes)
+  names(widths) <- k_vals
+  gc(verbose = FALSE)
+  return(names(widths)[widths == max(widths)])
+}
+
+
 # - Choose resolution --------------------------------------------------------
 choose_resolution <- function(object, resolutions = NULL, 
                               assay = "integrated", seed = NA) {
   dims <- 1:object@reductions$pca@misc$sig_pcs
+  distances <- dist(object@reductions$pca@cell.embeddings[, dims])
   
   # cluster at each resolution, finding mean silhouette width for each
   while (TRUE) {
-    if (is.null(resolutions)) {
-      return(NULL)
-    }
+    if (is.null(resolutions)) { return(NULL) }
     print(paste("Finding clusters for resolutions", 
             paste(resolutions, collapse = ", ")))
     clusters <- map(
       resolutions, 
       ~ FindClusters(object, resolution = .x, verbose = FALSE)@active.ident
       )
-    distances <- dist(object@reductions$pca@cell.embeddings[, dims])
     
     # calc silhouettes for all resolutions
     calc_silhouettes <- function(cluster_results, assay = assay) {
