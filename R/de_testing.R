@@ -81,16 +81,16 @@ choose_neighbors <- function(object, klim = c(20, NA)) {
     return(mean(sil[, 3]))
   }
   widths <- map_dbl(clusters, calc_silhouettes)
-  names(widths) <- k_vals
   gc(verbose = FALSE)
-  return(names(widths)[widths == max(widths)])
+  return(k_vals[widths == max(widths)])
 }
 
 
 # - Choose resolution --------------------------------------------------------
 choose_resolution <- function(object, resolutions = NULL, 
-                              assay = "integrated", seed = NA) {
+                              assay = "RNA", seed = NA) {
   dims <- 1:object@reductions$pca@misc$sig_pcs
+  print("Calculating distance matrix ...")
   distances <- dist(object@reductions$pca@cell.embeddings[, dims])
   
   # cluster at each resolution, finding mean silhouette width for each
@@ -104,7 +104,7 @@ choose_resolution <- function(object, resolutions = NULL,
       )
     
     # calc silhouettes for all resolutions
-    calc_silhouettes <- function(cluster_results, assay = assay) {
+    calc_silhouettes <- function(cluster_results) {
       sil <- cluster::silhouette(as.numeric(cluster_results), distances)
       return(mean(sil[, 3]))
     }
@@ -135,7 +135,8 @@ cluster <- function(object, assay = "RNA", seed = NA) {
   }
   pcs <- object@reductions$pca@misc$sig_pcs
   # Find neighbors and cluster and different resolutions
-  k <- round(sqrt(ncol(object@assays$RNA@counts)), 0)
+  print(paste("Choosing optimal k for k-nearest neighbors"))
+  k <- choose_neighbors(object)
   print(paste("Finding nearest neighbors using k =", k))
   object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE, k.param = k)
   clusters <- choose_resolution(object, assay = assay,
@@ -225,10 +226,10 @@ find_markers <- function(object, cluster, other = NULL, genes = NULL,
   if (is.null(genes)) { genes <- rownames(object@assays$RNA@counts) }
   cells_in <- names(object@active.ident)[object@active.ident %in% cluster]
   if (is.null(other)) {
-    print(paste("Calculating cluster", paste(cluster, collapse = ",")))
+    print(paste("Finding markers for cluster", paste(cluster, collapse = ",")))
     cells_out <- names(object@active.ident)[!object@active.ident %in% cluster]
   } else {
-    print(paste("Calculating cluster", paste(cluster, collapse = ","), 
+    print(paste("Finding markers for cluster", paste(cluster, collapse = ","), 
                 "vs.", paste(other, collapse = ",")))
     cells_out <- names(object@active.ident)[object@active.ident %in% other]
   }
