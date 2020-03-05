@@ -13,9 +13,43 @@ downsample_matrix <- function(mtx, n_counts = 1000) {
   return(Matrix::Matrix(mtx, sparse = TRUE))
 }
 
+# collapse duplicate genes
+collapse_duplicate_genes <- function(mtx, method = "max") {
+  if (!any(duplicated(rownames(mtx)))) { return(mtx) }
+  duplicate_genes <- unique(rownames(mtx)[duplicated(rownames(mtx))])
+  mtx1 <- mtx[-which(rownames(mtx) %in% duplicate_genes), ]
+  if (method == "max") {
+    # take row that has max value
+    max_function <- function(gene) {
+      indexes <- which(rownames(mtx) == gene)
+      values <- Matrix::rowSums(mtx[indexes, ])
+      return(indexes[values == max(values)][1])
+    }
+    mtx2 <- mtx[sapply(duplicate_genes, max_function, simplify = TRUE), ]
+  } else if (method == "combine") {
+    # combine all rows together
+    combine_function <- function(gene) {
+      indexes <- which(rownames(mtx) == gene)
+      return(Matrix::colSums(mtx[indexes, ]))
+    }
+    mtx2 <- t(sapply(duplicate_genes, combine_function))
+  } else if (method == "first") {
+    # take first instance of gene
+    mtx2 <- t(sapply(duplicate_genes, function(x) mtx[x, ]))
+  }
+  mtx2 <- Matrix::Matrix(mtx2, sparse = TRUE)
+  gc(verbose = FALSE)
+  return(rbind(mtx1, mtx2))
+}
 
 # keep genes that are in all matrices
-keep_shared_genes <- function(mtx_list) {
+keep_shared_genes <- function(mtx_list, duplicate_gene_method = "max") {
+  duplicated_genes <- any(map_int(mtx_list, ~ sum(duplicated(rownames(.x)))))
+  if (duplicated_genes) {
+    mtx_list <- map(mtx_list, 
+                    ~ collapse_duplicate_genes(.x, method = duplicate_gene_method)
+                    )
+  }
   shared <- unlist(sapply(mtx_list, rownames)) %>% table() %>% 
     .[. == length(mtx_list)] %>% names()
   return(map(mtx_list, ~ .x[shared, ]))
@@ -144,6 +178,7 @@ scrublet <- function(mtx) {
   source_python("/home/alanrupp/Programs/dropseq3/python/scrublet.py")
   expected_doublet_rate <- find_expected_doublet_rate(mtx)
   doublets <- score_doublets(mtx, expected_doublet_rate)
+  gc(verbose = FALSE)
   return(doublets)
 }
 
@@ -161,15 +196,16 @@ integrate_data <- function(object) {
 # - Run scran normalize -------------------------------------------------------
 run_scran_normalize <- function(object) {
   print(paste("Normalizing data with scran", packageVersion("scran"), "..."))
-  library(scran)
-  sce <- SingleCellExperiment(assays = list("counts" = object@assays$RNA@counts))
+  sce <- SingleCellExperiment::SingleCellExperiment(
+    assays = list("counts" = object@assays$RNA@counts)
+    )
   print("Running dimension reduction ...")
-  clusters <- quickCluster(sce)
+  clusters <- scran::quickCluster(sce)
   print("Computing sum factors ...")
-  sce <- computeSumFactors(sce, clusters = clusters)
+  sce <- scran::computeSumFactors(sce, clusters = clusters)
   print("Log normalizing counts ...")
   sce <- scater::logNormCounts(sce)
-  object@assays$RNA@data <- logcounts(sce)
+  object@assays$RNA@data <- SingleCellExperiment::logcounts(sce)
   return(object)
 }
 
@@ -206,8 +242,10 @@ normalize_data <- function(object, method = "scran", batch = NULL) {
 }
 
 # - Scale data --------------------------------------------------------------
-scale_data <- function(object, groups = NULL, assay = "RNA") {
+scale_data <- function(object, groups = NULL, assay = "RNA", data = "counts",
+                       genes = NULL) {
   mtx <- slot(object@assays[[assay]], "counts")
+  if (!is.null(genes)) { mtx <- mtx[genes, ] }
   if (is.null(groups)) {
     scaled <- t(scale(Matrix::t(mtx)))
     rownames(scaled) <- rownames(mtx); colnames(scaled) <- colnames(mtx)
