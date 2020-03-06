@@ -564,7 +564,7 @@ flamemap <- function(object, genes, cells = NULL, n_bars = 100,
 }
 
 # - Plot GSEA scores ----------------------------------------------------------
-plot_gsea_scores <- function(gsea_scores, zeros = FALSE) {
+plot_gsea_scores <- function(gsea_scores, max_val = 1, zeros = FALSE) {
   # set levels
   group_levels <- gsea_scores %>% as.data.frame() %>% 
     rownames_to_column("group") %>%
@@ -579,9 +579,13 @@ plot_gsea_scores <- function(gsea_scores, zeros = FALSE) {
   cluster_levels <- colnames(gsea_scores)
   
   df <- gsea_scores %>% as.data.frame() %>% rownames_to_column("group") %>%
+    filter(group %in% group_levels) %>%
     gather(-group, key = "cluster", value = "score") %>%
     mutate(group = factor(group, levels = group_levels),
-           cluster = factor(cluster, levels = cluster_levels))
+           cluster = factor(cluster, levels = cluster_levels)) %>%
+    mutate(score = ifelse(score < -max_val, -max_val,
+                          ifelse(score > max_val, max_val, score))
+    )
   # plot
   p <- ggplot(df, aes(x = cluster, y = fct_rev(group), fill = score)) +
     geom_tile(show.legend = FALSE) +
