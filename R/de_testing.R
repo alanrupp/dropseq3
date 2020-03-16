@@ -65,12 +65,15 @@ pca <- function(object) {
 }
 
 # - Choose k neighbors -------------------------------------------------------
-choose_neighbors <- function(object, klim = c(20, NA)) {
-  if (is.na(klim[2])) { klim[2] <- sqrt(ncol(object@assays$RNA@counts)) }
+choose_neighbors <- function(object, klim = c(20, NA), assay = "RNA") {
+  if (is.na(klim[2])) { klim[2] <- round(
+    sqrt(ncol(slot(object@assays[[assay]], "data"))), 0) }
+  if (klim[2] < klim[1]) { klim[1] <- klim[2] }
   k_vals <- seq(klim[1], klim[2], by = 10)
   pcs <- object@reductions$pca@misc$sig_pcs
   pipeline <- function(k) {
-    object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE, k.param = k)
+    object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE, k.param = k,
+                            assay = assay)
     FindClusters(object, resolution = 1, verbose = FALSE)@active.ident
   }
   clusters <- map(k_vals, pipeline)
@@ -429,7 +432,8 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
   markers <- filter(markers, p_val_adj < 0.05)
   markers <- markers %>%
     group_by(cluster) %>%
-    arrange(desc(pct.1 - pct.2))
+    arrange(desc(pct.1 - pct.2)) %>%
+    ungroup()
   return(markers)
 }
 

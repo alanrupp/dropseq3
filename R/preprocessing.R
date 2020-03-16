@@ -242,9 +242,9 @@ normalize_data <- function(object, method = "scran", batch = NULL) {
 }
 
 # - Scale data --------------------------------------------------------------
-scale_data <- function(object, groups = NULL, assay = "RNA", data = "counts",
+scale_data <- function(object, groups = NULL, assay = "RNA", data = "data",
                        genes = NULL) {
-  mtx <- slot(object@assays[[assay]], "counts")
+  mtx <- slot(object@assays[[assay]], data)
   if (!is.null(genes)) { mtx <- mtx[genes, ] }
   if (is.null(groups)) {
     scaled <- t(scale(Matrix::t(mtx)))
