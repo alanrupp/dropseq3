@@ -975,30 +975,41 @@ traverse_tree <- function(object, genes = NULL, assay = "RNA",
     if (is.null(groupby)) {
       markers <- map(
         unique(clusters),
-        ~ find_markers(object, 
-                       cluster = names(clusters)[clusters == .x],
-                       other = names(clusters)[clusters != .x],
-                       genes = genes)
+        ~ FindMarkers(object, 
+                      ident.1 = names(clusters)[clusters == .x],
+                      ident.2 = names(clusters)[clusters != .x],
+                      features = genes, only.pos = TRUE, verbose = FALSE) %>%
+          as.data.frame() %>%
+          rownames_to_column("gene") %>%
+          mutate("cluster" = .x)
       )
     } else {
       markers <- map(
         unique(clusters),
-        ~ find_conserved_markers(object, 
-                                 cluster = names(clusters)[clusters == .x],
-                                 groupby = groupby,
-                                 other = names(clusters)[clusters != .x],
-                                 genes = genes)
+        ~ FindConservedMarkers(object, 
+                               ident.1 = names(clusters)[clusters == .x],
+                               ident.2 = names(clusters)[clusters != .x],
+                               grouping.var = groupby,
+                               features = genes, only.pos = TRUE,
+                               meta.method = metap::logitp,
+                               verbose = FALSE)  %>%
+          as.data.frame() %>%
+          rownames_to_column("gene") %>%
+          mutate("cluster" = .x) %>%
+          simplify_conserved_markers()
       )
     }
+    markers <- bind_rows(markers)
     # keep only the lowest p value for each gene
-    markers %>% bind_rows() %>%
+    result <- markers %>% 
       filter(p_val_adj < 0.05) %>%
-      mutate(p_val_adj = -log10(p_val_adj)) %>%
-      group_by(gene) %>%
-      arrange(desc(p_val_adj)) %>%
-      dplyr::slice(1) %>% ungroup() %>%
-      summarize("total" = sum(p_val_adj)) %>%
-      .$total
+      arrange(desc(pct.1 - pct.2)) %>%
+      group_by(cluster) %>%
+      slice(1:20) %>% ungroup() %>%
+      summarize("score" = median(pct.1 - pct.2) * 100) %>%
+      .$score
+    print(paste("Median pct de:", result))
+    return(result)
   }
   # find DE score for all levels of tree
   result <- map_dbl(2:max_clusters, get_de)

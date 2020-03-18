@@ -260,6 +260,7 @@ violin_plot <- function(object, genes, x = "cluster", group = NULL,
                         clusters = NULL, n_col = 1, jitter = FALSE,
                         colors = NULL, void = FALSE, flip = FALSE,
                         order_genes = TRUE, stacked = FALSE) {
+  genes <- genes[genes %in% rownames(slot(object@assays$RNA, data))]
   # get data
   object$cluster <- object@active.ident
   meta <- data.frame("na" = matrix(NA, nrow = ncol(slot(object@assays$RNA, data))))
