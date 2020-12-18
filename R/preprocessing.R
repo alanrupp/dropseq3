@@ -1,11 +1,11 @@
 library(reticulate)
 
 # -- Matrix functions ---------------------------------------------------------
-# downsample matrix 
+# downsample matrix
 downsample_matrix <- function(mtx, n_counts = 1000) {
   gene_levels <- rownames(mtx); cell_levels <- colnames(mtx)
   counts <- map(1:ncol(mtx), ~ rep(gene_levels, times = mtx[, .x]))
-  new_counts <- map(counts, 
+  new_counts <- map(counts,
                     ~ sample(.x, min(n_counts, length(.x)), replace = FALSE))
   new_counts <- map(new_counts, ~ table(factor(.x, levels = gene_levels)))
   mtx <- do.call(cbind, new_counts)
@@ -46,11 +46,11 @@ collapse_duplicate_genes <- function(mtx, method = "max") {
 keep_shared_genes <- function(mtx_list, duplicate_gene_method = "max") {
   duplicated_genes <- any(map_int(mtx_list, ~ sum(duplicated(rownames(.x)))))
   if (duplicated_genes) {
-    mtx_list <- map(mtx_list, 
+    mtx_list <- map(mtx_list,
                     ~ collapse_duplicate_genes(.x, method = duplicate_gene_method)
                     )
   }
-  shared <- unlist(sapply(mtx_list, rownames)) %>% table() %>% 
+  shared <- unlist(sapply(mtx_list, rownames)) %>% table() %>%
     .[. == length(mtx_list)] %>% names()
   return(map(mtx_list, ~ .x[shared, ]))
 }
@@ -82,7 +82,7 @@ remove_unwanted_genes <- function(mtx, remove_Gm = TRUE) {
     nonmito <- nonmito[nonmito %in% rownames(mtx)]
     mtx <- mtx[nonmito, ]
   }
-  
+
   # remove genes starting with Gm if desired
   if (remove_Gm) {
     if (class(mtx) == "list") {
@@ -154,7 +154,7 @@ find_variable_genes <- function(object, genes = NULL, assay = "RNA",
   # keep only selected genes
   if (!is.null(genes)) {
     if (sum(!genes %in% rownames(mtx)) > 0) {
-      warning(paste("Genes not in dataset:", 
+      warning(paste("Genes not in dataset:",
                     paste(genes[!genes %in% rownames(mtx)], collapse = ", ")))
     }
     genes <- genes[genes %in% rownames(mtx)]
@@ -182,12 +182,12 @@ scrublet <- function(mtx) {
   return(doublets)
 }
 
-
 # - Integrate data ------------------------------------------------------------
 integrate_data <- function(object) {
-  print("Integrating data")
   k <- min(200, min(sapply(object, ncol)))
+  print("Finding integration anchors ...")
   anchors <- FindIntegrationAnchors(object, k.filter = k, verbose = FALSE)
+  print("Integrating data ...")
   object <- IntegrateData(anchors, verbose = FALSE)
   DefaultAssay(object) <- "integrated"
   return(object)
@@ -200,7 +200,7 @@ run_scran_normalize <- function(object) {
     assays = list("counts" = object@assays$RNA@counts)
     )
   print("Running dimension reduction ...")
-  clusters <- scran::quickCluster(sce)
+  clusters <- scran::quickCluster(sce, min.size = 0)
   print("Computing sum factors ...")
   sce <- scran::computeSumFactors(sce, clusters = clusters)
   print("Log normalizing counts ...")
@@ -225,9 +225,9 @@ normalize_data <- function(object, method = "scran", batch = NULL) {
     library(sctransform)
     metadata <- object@meta.data
     metadata$log_umi_per_gene <- log10(metadata$nCount_RNA/metadata$nFeature_RNA)
-    vst_out <- vst(object@assays$RNA@counts, 
-                   cell_attr = metadata, 
-                   latent_var = 'log_umi_per_gene', 
+    vst_out <- vst(object@assays$RNA@counts,
+                   cell_attr = metadata,
+                   latent_var = 'log_umi_per_gene',
                    batch_var = batch)
     object@assays$RNA@data <- vst_out$y
   } else if (method == "TPM") {
@@ -245,7 +245,7 @@ normalize_data <- function(object, method = "scran", batch = NULL) {
 scale_data <- function(object, groups = NULL, assay = "RNA", data = "data",
                        genes = NULL) {
   mtx <- slot(object@assays[[assay]], data)
-  if (!is.null(genes)) { mtx <- mtx[genes, ] }
+  if (!is.null(genes)) mtx <- mtx[genes, ]
   if (is.null(groups)) {
     scaled <- t(scale(Matrix::t(mtx)))
     rownames(scaled) <- rownames(mtx); colnames(scaled) <- colnames(mtx)
@@ -269,4 +269,29 @@ knee_test <- function(object) {
   percent_var <- cumsum(object@reductions$pca@stdev^2)/total_var * n_pc
   diminishing <- which(percent_var - lag(percent_var) < 1)
   return(min(diminishing) - 1)
+}
+
+# - Quantile normalize --------------------------------------------------------
+quantile_normalize <- function(df) {
+  # code adapted from Dave Tang
+  ranks <- apply(df, 2, rank, ties.method = "min")
+  means <- apply(df, 2, sort) %>% apply(., 1, mean)
+  get_values <- function(rank_values) {
+    values <- means[rank_values]
+    # if ties, average each value by its position
+    if (any(duplicated(rank_values))) {
+      dups <- unique(rank_values[duplicated(rank_values)])
+      new_means <- sapply(dups, function(x) {
+        missing_ranks <- seq(x, x+sum(rank_values == x)-1)
+        mean(means[missing_ranks])
+      })
+      for (i in 1:length(dups)) {
+        values[rank_values == dups[i]] <- new_means[i]
+      }
+    }
+    return(values)
+  }
+  new_values <- apply(ranks, 2, get_values)
+  rownames(new_values) <- rownames(df); colnames(new_values) <- colnames(df)
+  return(new_values)
 }
