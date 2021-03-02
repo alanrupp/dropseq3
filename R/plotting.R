@@ -637,7 +637,8 @@ plot_gsea_scores <- function(gsea_scores, max_val = 1, zeros = FALSE) {
 
 # - RGB plot -----------------------------------------------------------------
 rgb_plot <- function(object, red = NULL, green = NULL, blue = NULL,
-                     assay = "RNA", data = "data", point_size = 0.8) {
+                     assay = "RNA", data = "data", n_cells = NULL,
+		     point_size = 0.8) {
   get_data <- function(color) {
     if (is.null(color)) {
       return(0)
@@ -657,10 +658,11 @@ rgb_plot <- function(object, red = NULL, green = NULL, blue = NULL,
     mutate('cell' = factor(seq(nrow(.)))) %>%
     mutate("color" = rgb(red, green, blue))
   
+  if ((!is.null(n_cells)) & (n_cells > nrow(df))) df <- sample_n(df, n_cells)
   # plot
   p <- ggplot(df, aes(x = UMAP1, y = UMAP2, color = cell)) +
     scale_color_manual(values = df$color) +
-    geom_point(show.legend = FALSE, size = point_size) +
+    geom_point(show.legend = FALSE, stroke = 0, size = point_size) +
     theme_void() +
     theme(panel.background = element_rect(fill = "gray40", color = "black"))
   return(p)
