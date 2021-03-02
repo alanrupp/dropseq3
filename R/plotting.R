@@ -658,7 +658,7 @@ rgb_plot <- function(object, red = NULL, green = NULL, blue = NULL,
     mutate('cell' = factor(seq(nrow(.)))) %>%
     mutate("color" = rgb(red, green, blue))
   
-  if ((!is.null(n_cells)) & (n_cells > nrow(df))) df <- sample_n(df, n_cells)
+  if (!is.null(n_cells)) df <- sample_n(df, min(n_cells, nrow(df)))
   # plot
   p <- ggplot(df, aes(x = UMAP1, y = UMAP2, color = cell)) +
     scale_color_manual(values = df$color) +
