@@ -5,18 +5,18 @@ library(ggdendro)
 
 # - Summarize data ------------------------------------------------------------
 summarize_data <- function(object, genes, clusters = NULL) {
-  if (is.null(clusters)) {
-    clusters <- unique(object@active.ident)
-  } else {
+  if (is.null(clusters)) clusters <- unique(object@active.ident)
+  if (any(!clusters %in% object@active.ident)) {
+    missing <- clusters[!clusters %in% object@active.ident]
+    warning(paste(paste(missing, collapse = ", ")), "not in dataset.")
     clusters <- clusters[clusters %in% object@active.ident]
   }
-  
   # keep valid genes
   genes <- genes[genes %in% rownames(object@assays$RNA@data)]
   
   # grab data
   if (length(genes) == 0) {
-    return(NULL)
+    stop("No valid genes")
   } else if (length(genes) == 1) {
     df <- object@assays$RNA@data[genes, ] %>% as.data.frame() %>% t() %>% 
       as.data.frame()
@@ -34,7 +34,7 @@ summarize_data <- function(object, genes, clusters = NULL) {
   df <- left_join(df, data.frame("barcode" = names(object@active.ident),
                                  "cluster" = object@active.ident), by = "barcode")
   
-  if (!is.null(clusters)) {  df <- filter(df, cluster %in% clusters) }
+  if (!is.null(clusters)) df <- filter(df, cluster %in% clusters)
   # summarize
   df <- df %>%
     group_by(gene, cluster) %>%
@@ -47,9 +47,53 @@ summarize_data <- function(object, genes, clusters = NULL) {
 
 # - GG color hue --------------------------------------------------------------
 # from John Colby on Stack Overflow
-gg_color_hue <- function(n) {
+gg_color_hue <- function(n, l = 65, c = 100) {
   hues = seq(15, 375, length = n + 1)
-  hcl(h = hues, l = 65, c = 100)[1:n]
+  hcl(h = hues, l = l, c = c)[1:n]
+}
+
+# - Colors --------------------------------------------------------------------
+order_colors <- function(colors) {
+  # Order colors based on euclidean distance in Lab space
+  color_names <- colors
+  # put in RGB
+  colors <- colorspace::hex2RGB(colors)
+  # convert to Lab space
+  colors <- convertColor(colors@coords, from = "sRGB", to = "Lab")
+  rownames(colors) <- color_names
+  color_order <- hclust(dist(colors))
+  color_order <- color_order$labels[color_order$order]
+  return(color_order)
+}
+
+# - Dim plot ------------------------------------------------------------------
+dim_plot <- function(object, reduction = "umap", label = TRUE, repel = FALSE,
+                     label_size = 4, point_size = 2, point_stroke = 0) {
+  # get data
+  df <- as.data.frame(object@reductions[[reduction]]@cell.embeddings[, 1:2])
+  colnames(df) <- c("Dim1", "Dim2")
+  df$Cluster <- object@active.ident
+
+  # summarize centers
+  cluster_centers <- df %>% group_by(Cluster) %>%
+    summarize("Dim1" = median(Dim1), "Dim2" = median(Dim2),
+              .groups = "drop")
+  # plot
+  p <- ggplot(df, aes(x = Dim1, y = Dim2)) +
+    geom_point(aes(color = Cluster), size = point_size, 
+               stroke = point_stroke) +
+    theme_void()
+  if (label) {
+    if (repel) {
+      p <- p + geom_text_repel(data = cluster_centers, aes(label = Cluster), 
+                               size = label_size)
+    } else {
+      p <- p + geom_text(data = cluster_centers, aes(label = Cluster),
+                         size = label_size)
+    }
+    p <- p + theme(legend.position = "none")
+  }
+  return(p)
 }
 
 # - Clip matrix ---------------------------------------------------------------
@@ -67,7 +111,7 @@ auto_clip <- function(mtx) {
 }
 
 # Heatmap plot ----------------------------------------------------------
-heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
+heatmap_plot <- function(object, genes = NULL, cells = NULL, data = "scale.data",
                          label_genes = FALSE,
                          heatmap_legend = FALSE, title = NA,
                          max_expr = NULL,
@@ -76,7 +120,12 @@ heatmap_plot <- function(object, genes = NULL, cells = NULL, scale = TRUE,
                          flipped = FALSE) {
   
   # calculate mean expression by cluster
-  mean_values <- cluster_means(object, genes)
+  mean_values <- cluster_means(object, genes, data = data)
+  
+  # remove NA from mean_values
+  mean_values <- mean_values[
+    !apply(mean_values, 1, function(x) all(is.na(x))), 
+  ]
   
   # cluster genes to group expression patterns
   if (cluster_genes) {
@@ -265,7 +314,7 @@ violin_plot <- function(object, genes, x = "cluster", group = NULL,
   object$cluster <- object@active.ident
   meta <- data.frame("na" = matrix(NA, nrow = ncol(slot(object@assays$RNA, data))))
   meta[, x] <- object@meta.data[, x]
-  meta <- select(meta, -na)
+  meta <- dplyr::select(meta, -na)
   if (!is.null(group)) { meta[, group] <- object@meta.data[, group] }
   if (!is.null(fill)) { meta[, fill] <- object@meta.data[, fill] }
   if (!is.null(facet)) { meta[, facet] <- object@meta.data[, facet] }
@@ -282,9 +331,9 @@ violin_plot <- function(object, genes, x = "cluster", group = NULL,
     df <- data.frame("y" = slot(object@assays$RNA, data)[genes, ], "gene" = genes)
     df <- bind_cols(meta, df)
   }
-  if (order_genes) { df <- mutate(df, gene = factor(gene, levels = genes)) }
+  if (order_genes) df <- mutate(df, gene = factor(gene, levels = genes))
   # filter non-selected clusters
-  if (!is.null(clusters)) { df <- filter(df, cluster %in% clusters) }
+  if (!is.null(clusters)) df <- filter(df, cluster %in% clusters)
   # plot
   p <- ggplot(df, aes(x = !!sym(x), y = y, group = group))  +
     theme_classic() +
@@ -305,8 +354,6 @@ violin_plot <- function(object, genes, x = "cluster", group = NULL,
   if (jitter) {
     p <- p + geom_jitter(width = 0.4, height = 0, alpha = 0.4, stroke = 0)
   }
-  if (void) { p <- p + theme_void() }
-  if (flip) { p <- p + coord_flip() }
   if (stacked) {
     p <- p + facet_wrap(~ gene, scales = "free_y", ncol = 1,
                         strip.position = "left") +
@@ -315,9 +362,7 @@ violin_plot <- function(object, genes, x = "cluster", group = NULL,
                          breaks = seq(2, max(df$y), by = 2),
                          labels = seq(2, max(df$y), by = 2)) +
       theme(strip.background = element_blank(),
-            axis.ticks.y = element_blank(),
-            strip.text.y = element_text(angle = 180,
-                                        hjust = 1, vjust = 0.5)) +
+            axis.ticks.y = element_blank()) +
       ylab(NULL)
   }
   return(p)
@@ -328,12 +373,12 @@ violin_plot <- function(object, genes, x = "cluster", group = NULL,
 umap_plot <- function(object, genes, cells = NULL, clusters = NULL, 
                       legend = TRUE, cluster_label = FALSE,
                       ncol = NULL, xlim = NULL, ylim = NULL,
-                      order_genes = FALSE) {
+                      order_genes = FALSE, point_size = 2) {
   
-  if (is.null(clusters)) {
-    clusters <- sort(unique(object@active.ident))
+  if (is.null(cells)) {
+    cells <- colnames(object@assays$RNA@data)
   } else {
-    clusters <- clusters[object@active.ident %in% clusters]
+    cells <- cells[cells %in% colnames(object@assays$RNA@data)]
   }
   
   # pull expression data
@@ -346,11 +391,11 @@ umap_plot <- function(object, genes, cells = NULL, clusters = NULL,
   }
   pull_data <- function(genes) {
     if (length(genes) == 1) {
-      df <- object@assays$RNA@data[genes, object@active.ident %in% clusters] %>% 
+      df <- object@assays$RNA@data[genes, cells] %>% 
         as.data.frame() %>% 
         set_names(genes)
     } else {
-      df <- object@assays$RNA@data[genes, object@active.ident %in% clusters] %>% 
+      df <- object@assays$RNA@data[genes, cells] %>% 
         as.matrix() %>% t() %>% as.data.frame()
     }
     return(df)
@@ -361,7 +406,8 @@ umap_plot <- function(object, genes, cells = NULL, clusters = NULL,
     UMAP1 = object@reductions$umap@cell.embeddings[, 1],
     UMAP2 = object@reductions$umap@cell.embeddings[, 2]
   )
-  umap <- umap[object@active.ident %in% clusters, ]
+  umap <- umap[cells, ]
+  
 
   
   # combine umap and expression data
@@ -382,7 +428,8 @@ umap_plot <- function(object, genes, cells = NULL, clusters = NULL,
   # plot
   plt <-
     ggplot(results, aes(x = UMAP1, y = UMAP2)) +
-    geom_point(aes(color = value), show.legend = legend, stroke = 0) +
+    geom_point(aes(color = value), show.legend = legend, stroke = 0,
+               size = point_size) +
     scale_color_gradient(low = "gray90", high = "navyblue",
                          name = expression(underline("Expression"))) +
     theme_bw() +
@@ -436,49 +483,38 @@ doublet_umap_plot <- function(object, doublets) {
 
 # - Dot plot ------------------------------------------------------------------
 dot_plot <- function(object, genes, clusters = NULL, 
-                     gene_order = FALSE,
-                     cluster_order = FALSE,
-                     cluster_labels = FALSE) {
+                     order_genes = FALSE,
+                     order_clusters = FALSE,
+                     label_clusters = TRUE) {
   
   # get summary data
   df <- summarize_data(object, genes, clusters)
-  
-  if (cluster_order == TRUE) {
-    df <- df %>%
-      mutate(cluster = factor(cluster, levels = clusters))
-  }
-  
-  if (gene_order == TRUE) {
-    df <- df %>%
-      mutate(gene = factor(gene, levels = genes))
-  }
+  # reorder
+  if (order_clusters) df <- mutate(df, cluster = factor(cluster, levels = clusters))
+  if (order_genes) df <- mutate(df, gene = factor(gene, levels = genes))
   
   # plot
-  plt <- 
-    ggplot(df, aes(x = gene, y = fct_rev(cluster), size = avg,
-                   color = prop)) +
-    geom_point(show.legend = FALSE) +
-    scale_x_discrete(position = "top") +
-    scale_radius(limits = c(0.01, NA)) +
-    scale_color_gradient(low = "gray", high = "dodgerblue3") +
-    theme_void()
-  
-  if (cluster_labels == TRUE) {
-    plt <- plt + theme(axis.text.x = element_text(color = "black", angle = 89, 
-                                                  vjust = 0.5, hjust = 0.5),
-                       axis.text.y = element_text())
-  } else {
-    plt <- plt + theme(axis.text.x = element_text(color = "black", angle = 89, vjust = 1,
-                                                  hjust = ))
-  }
-  
-  return(plt)
+  p <- ggplot(df, aes(x = gene, y = fct_rev(cluster), size = avg, color = prop)) +
+    geom_point() +
+    scale_size_area() +
+    scale_color_gradient(low = "gray", high = "navyblue") +
+    theme_void() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+          axis.text.y = element_text(hjust = 1))
+  if (!label_clusters) {
+    p <- p + theme(axis.text.y = element_blank())
+  } 
+  return(p)
 }
 
 # - Flamemap plot ------------------------------------------------------------
 flamemap <- function(object, genes, cells = NULL, n_bars = 100,
                      order_genes = FALSE, cluster_labels = TRUE,
                      icicle = FALSE) {
+  if (any(!genes %in% rownames(object))) {
+    missing <- genes[!genes %in% rownames(object)]
+    warning(paste(paste(missing, collapse = ", "), "not in the dataset."))
+  }
   genes <- genes[genes %in% rownames(object@assays$RNA@data)]
   if (is.null(cells)) {
     cells <- colnames(object@assays$RNA@data)
@@ -572,10 +608,10 @@ plot_gsea_scores <- function(gsea_scores, max_val = 1, zeros = FALSE) {
     gather(-group, key = "cluster", value = "score") %>%
     mutate_at(vars(cluster, score), as.numeric) %>%
     filter(score > 0) %>%
-    mutate("place" = cluster * score) %>%
     group_by(group) %>%
-    summarize("place" = median(place)) %>%
-    arrange(place) %>%
+    arrange(desc(score)) %>%
+    slice(1) %>% ungroup() %>%
+    arrange(cluster) %>%
     .$group
   cluster_levels <- colnames(gsea_scores)
   
@@ -629,3 +665,31 @@ rgb_plot <- function(object, red = NULL, green = NULL, blue = NULL,
     theme(panel.background = element_rect(fill = "gray40", color = "black"))
   return(p)
 }
+
+# - Alluvial plot -------------------------------------------------------------
+alluvial_plot <- function(old, new, fill = "New") {
+  library(ggalluvial)
+  df <- data.frame("Old" = old, "New" = new) %>%
+    group_by(Old, New) %>%
+    count() %>% ungroup()
+  # add labels
+  make_labels <- function(column) {
+    df %>% mutate("col" = fct_rev(!!sym(column))) %>% 
+      group_by(col) %>% summarize("n" = sum(n)) %>% ungroup() %>%
+      mutate("label" = cumsum(n)-n/2)
+  }
+  old_labels <- make_labels("Old")
+  new_labels <- make_labels("New")
+  # plot
+  p <- ggplot(df, aes(axis1 = Old, axis2 = New, y = n)) +
+    geom_alluvium(aes(fill = !!sym(fill)), show.legend = FALSE) +
+    geom_stratum(width = 1/12) +
+    theme_void() +
+    scale_x_continuous(expand = c(0, 0)) +
+    geom_text(data = old_labels, aes(x = 1, y = label, label = col),
+              inherit.aes = FALSE, hjust = 0) +
+    geom_text(data = new_labels, aes(x = 2, y = label, label = col),
+              inherit.aes = FALSE, hjust = 1)
+  return(p)
+}
+

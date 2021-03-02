@@ -12,29 +12,46 @@ get_cells <- function(object, cluster, not = FALSE) {
 }
 
 # - Cluster means -------------------------------------------------------------
-cluster_means <- function(object, genes = NULL, assay = "RNA", 
+cluster_means <- function(object, genes = NULL, assay = "RNA",
                           data = "scale.data") {
   clusters <- sort(unique(object@active.ident))
   mtx <- slot(object@assays[[assay]], data)
+  # make sure genes are in dataset
   if (is.null(genes)) {
     genes <- rownames(mtx)
   } else {
+    if (!all(genes %in% rownames(mtx))) {
+      print(paste("Warning:", paste(genes[!genes %in% rownames(mtx)],
+                                    collapse = ", "),
+                  "are not in the dataset."))
+    }
     genes <- genes[genes %in% rownames(mtx)]
   }
-  df <-
-    map(clusters, ~ Matrix::rowMeans(mtx[genes, get_cells(object, .x)])) %>% 
-    set_names(clusters) %>%
-    bind_cols() %>%
-    as.data.frame()
-  rownames(df) <- genes
+  # calculate
+  if (length(genes) == 0) {
+    stop("No provided genes are in the dataset.")
+  } else if (length(genes) == 1) {
+    df <- map_dbl(clusters, ~ mean(mtx[genes, get_cells(object, .x)], na.rm = TRUE))
+    df <- matrix(df, nrow = 1, ncol = length(clusters)) %>% as.data.frame()
+    rownames(df) <- genes; colnames(df) <- clusters
+  } else {
+    df <-
+      map(clusters, ~ Matrix::rowMeans(mtx[genes, get_cells(object, .x)],
+                                       na.rm = TRUE)) %>%
+      set_names(clusters) %>%
+      bind_cols() %>%
+      as.data.frame()
+    rownames(df) <- genes
+  }
   return(df)
 }
 
 # - Order clusters by gene list -----------------------------------------------
-order_clusters <- function(object, genes = NULL, max_expr = 2, scale = TRUE) {
-  mean_values <- cluster_means(object, genes)
+order_clusters <- function(object, genes = NULL, max_expr = 2,
+                           assay = "RNA", data = "scale.data") {
+  mean_values <- cluster_means(object, genes, assay, data)
   mean_values <- clip_matrix(mean_values, max_expr)
-  if (scale) {
+  if (data == "scale.data") {
     tree <- hclust(dist(t(mean_values)))
   } else {
     tree <- hclust(dist(mean_values))
@@ -65,18 +82,29 @@ pca <- function(object) {
 }
 
 # - Choose k neighbors -------------------------------------------------------
-choose_neighbors <- function(object, klim = c(20, NA), assay = "RNA") {
-  if (is.na(klim[2])) { klim[2] <- round(
-    sqrt(ncol(slot(object@assays[[assay]], "data"))), 0) }
-  if (klim[2] < klim[1]) { klim[1] <- klim[2] }
-  k_vals <- seq(klim[1], klim[2], by = 10)
-  pcs <- object@reductions$pca@misc$sig_pcs
-  pipeline <- function(k) {
-    object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE, k.param = k,
-                            assay = assay)
-    FindClusters(object, resolution = 1, verbose = FALSE)@active.ident
+choose_neighbors <- function(object, klim = c(20, NA), assay = "RNA",
+                             steps = 10, resolution = 1, verbose = FALSE,
+                             progress_bar = FALSE) {
+  if (is.na(klim[2])) {
+    klim[2] <- round(
+      sqrt(ncol(slot(object@assays[[assay]], "data"))), 0
+    )
   }
-  clusters <- map(k_vals, pipeline)
+  if (klim[2] < klim[1]) { klim[1] <- klim[2] }
+  k_vals <- seq(klim[1], klim[2], by = steps)
+  pcs <- object@reductions$pca@misc$sig_pcs
+  # find clusters for each k value
+  pipeline <- function(k) {
+    if (verbose) { print(paste("... Calculating clusters for k =", k, "...")) }
+    object <- FindNeighbors(object, dims = 1:pcs, verbose = verbose,
+                            k.param = k, assay = assay)
+    FindClusters(object, resolution = 1, verbose = verbose)@active.ident
+  }
+  if (progress_bar) {
+    clusters <- pbapply::pblapply(k_vals, pipeline)
+  } else {
+    clusters <- map(k_vals, pipeline)
+  }
   # calc silhouettes for all k values
   distances <- dist(object@reductions$pca@cell.embeddings[, 1:pcs])
   calc_silhouettes <- function(cluster_results) {
@@ -90,22 +118,22 @@ choose_neighbors <- function(object, klim = c(20, NA), assay = "RNA") {
 
 
 # - Choose resolution --------------------------------------------------------
-choose_resolution <- function(object, resolutions = NULL, 
+choose_resolution <- function(object, resolutions = NULL,
                               assay = "RNA", seed = NA) {
   dims <- 1:object@reductions$pca@misc$sig_pcs
   print("Calculating distance matrix ...")
   distances <- dist(object@reductions$pca@cell.embeddings[, dims])
-  
+
   # cluster at each resolution, finding mean silhouette width for each
   while (TRUE) {
     if (is.null(resolutions)) { return(NULL) }
-    print(paste("Finding clusters for resolutions", 
+    print(paste("Finding clusters for resolutions",
             paste(resolutions, collapse = ", ")))
     clusters <- map(
-      resolutions, 
+      resolutions,
       ~ FindClusters(object, resolution = .x, verbose = FALSE)@active.ident
       )
-    
+
     # calc silhouettes for all resolutions
     calc_silhouettes <- function(cluster_results) {
       sil <- cluster::silhouette(as.numeric(cluster_results), distances)
@@ -113,7 +141,7 @@ choose_resolution <- function(object, resolutions = NULL,
     }
     widths <- map_dbl(clusters, calc_silhouettes)
     names(widths) <- resolutions
-    
+
     # choose resolution with highest mean silhouette width
     best_width <- sort(widths, decreasing = TRUE)[1] %>% names()
     # if best resolution is the max resolution tested, increase resolution
@@ -124,24 +152,20 @@ choose_resolution <- function(object, resolutions = NULL,
     }
     gc(verbose = FALSE)
   }
-  # return clusters from max resolution 
+  # return clusters from max resolution
   print(paste("Using resolution", best_width, "for clustering."))
   return(clusters[[which(resolutions == best_width)]])
 }
 
 # - Cluster -------------------------------------------------------------------
-cluster <- function(object, assay = "RNA", seed = NA) {
-  if (assay == "integrated") {
-    DefaultAssay(object) <- "integrated"
-  } else {
-    DefaultAssay(object) <- "RNA"
-  }
+cluster <- function(object, assay = "RNA", seed = NA,
+                    klim = c(20, NA), verbose = FALSE) {
   pcs <- object@reductions$pca@misc$sig_pcs
   # Find neighbors and cluster and different resolutions
   print(paste("Choosing optimal k for k-nearest neighbors"))
-  k <- choose_neighbors(object)
+  k <- choose_neighbors(object, verbose = verbose)
   print(paste("Finding nearest neighbors using k =", k))
-  object <- FindNeighbors(object, dims = 1:pcs, verbose = FALSE, k.param = k)
+  object <- FindNeighbors(object, dims = 1:pcs, verbose = verbose, k.param = k)
   clusters <- choose_resolution(object, assay = assay,
                                 resolutions = seq(0.2, 1, by = 0.2))
   object@active.ident <- clusters
@@ -159,8 +183,8 @@ get_umap_coordinates <- function(mtx, neighbors, distance) {
 get_dunn_index <- function(embeddings, clusters) {
   distances <- dist(embeddings) %>% as.matrix()
   result <- map_dbl(
-    clusters, 
-    ~ min(distances[clusters == .x, clusters != .x]) / 
+    clusters,
+    ~ min(distances[clusters == .x, clusters != .x]) /
       max(distances[clusters == .x, clusters == .x])
   )
   return(mean(result))
@@ -182,20 +206,20 @@ optimize_umap <- function(object, method = "dunn") {
   neighbors <- seq(5, 50, by = 5)
   dists <- c(0.001, 0.005, 0.01, 0.05, 0.1, 0.5)
   search_grid <- expand.grid(neighbors, dists)
-  
+
   # get UMAP coordinates
   cat("Calculating UMAP dimensions for each set of UMAP parameters\n")
-  results <- apply(search_grid, 1, function(x) 
+  results <- apply(search_grid, 1, function(x)
     get_umap_coordinates(mtx, x["Var1"], x["Var2"])
     )
-  
+
   # find correlation between umap result and distance
   cat("Finding UMAP parameters that are highly correlated with PC distance\n")
   pc_distances <- dist(mtx) %>% as.matrix() %>% as.vector()
   correlations <- map_dbl(
     results, ~ cor(pc_distances, dist(.x) %>% as.matrix %>% as.vector)
     )
-  
+
   cat("Choosing result based on highest correlation\n")
   search_grid$score <- correlations
   search_grid <- rename(search_grid, "n_neighbors" = Var1, "min_dist" = Var2)
@@ -206,7 +230,7 @@ optimize_umap <- function(object, method = "dunn") {
 # - Run UMAP ------------------------------------------------------------------
 run_umap <- function(object, method = "dunn") {
   parameters <- optimize_umap(object, method = method)
-  object <- RunUMAP(object, 
+  object <- RunUMAP(object,
                     dims = 1:object@reductions$pca@misc$sig_pcs,
                     n.neighbors = parameters[1, ]$n_neighbors,
                     min.dist = parameters[1, ]$min_dist,
@@ -232,18 +256,18 @@ find_markers <- function(object, cluster, other = NULL, genes = NULL,
     print(paste("Finding markers for cluster", paste(cluster, collapse = ",")))
     cells_out <- names(object@active.ident)[!object@active.ident %in% cluster]
   } else {
-    print(paste("Finding markers for cluster", paste(cluster, collapse = ","), 
+    print(paste("Finding markers for cluster", paste(cluster, collapse = ","),
                 "vs.", paste(other, collapse = ",")))
     cells_out <- names(object@active.ident)[object@active.ident %in% other]
   }
-  
+
   # function to calculate gene attributes
   gene_test <- function(gene) {
     result <- c(
       "avg_logFC" = round(log(mean(object@assays$RNA@data[gene, cells_in])) -
-                          log(mean(object@assays$RNA@data[gene, cells_out])), 
+                          log(mean(object@assays$RNA@data[gene, cells_out])),
                           3),
-      "pct.1" = round(sum(object@assays$RNA@counts[gene, cells_in] > 0) / 
+      "pct.1" = round(sum(object@assays$RNA@counts[gene, cells_in] > 0) /
                         length(cells_in), 3),
       "pct.2" = round(sum(object@assays$RNA@counts[gene, cells_out] > 0) /
                         length(cells_out), 3)
@@ -251,27 +275,27 @@ find_markers <- function(object, cluster, other = NULL, genes = NULL,
     if (only_pos) {
       if (result["avg_logFC"] > 0 & result["pct.1"] > result["pct.2"]) {
         p_val <- wilcox.test(
-          object@assays$RNA@data[gene, cells_in], 
-          object@assays$RNA@data[gene, cells_out], 
+          object@assays$RNA@data[gene, cells_in],
+          object@assays$RNA@data[gene, cells_out],
           alternative = "greater")$p.value
       } else {
         p_val <- 1-10^-9
       }
     } else {
       p_val <- wilcox.test(
-        object@assays$RNA@data[gene, cells_in], 
-        object@assays$RNA@data[gene, cells_out], 
+        object@assays$RNA@data[gene, cells_in],
+        object@assays$RNA@data[gene, cells_out],
         alternative = "greater")$p.value
     }
     return(c("p_val" = p_val, result))
   }
-  
+
   # run on all genes
   if (progress_bar) { mtx <- pbapply::pbsapply(genes, gene_test) }
   else { mtx <- sapply(genes, gene_test) }
-  
+
   # adjust P value and export
-  mtx <- as.data.frame(t(mtx)) %>% 
+  mtx <- as.data.frame(t(mtx)) %>%
     mutate("p_val_adj" = p.adjust(p_val, method = "BH"),
            "cluster" = paste(cluster, collapse = ", "),
            "gene" = genes) %>%
@@ -287,7 +311,7 @@ find_all_markers <- function(object, genes = NULL, remove_insig = FALSE,
   if (is.null(genes)) { genes <- rownames(object@assays$RNA@data) }
   clusters <- sort(unique(object@active.ident))
   result <- map(
-    clusters, 
+    clusters,
     ~ find_markers(object, .x, genes = genes, remove_insig = FALSE,
                    progress_bar = progress_bar, only_pos = only_pos)) %>%
     bind_rows() %>%
@@ -299,14 +323,14 @@ find_all_markers <- function(object, genes = NULL, remove_insig = FALSE,
 
 # - Cluster identity all cells -----------------------------------------------
 get_gsea_scores <- function(markers, only_classes = NULL) {
-  classes <- read_csv("~/Programs/dropseq3/data/celltype_markers.csv", 
+  classes <- read_csv("~/Programs/dropseq3/data/celltype_markers.csv",
                       col_types = c("ccc"))
-  
+
   markers <- markers %>%
     group_by(cluster) %>%
     filter(!duplicated(gene)) %>%
     filter(pct.1 > pct.2)
-  
+
   # get each score
   get_each_gsea_score <- function(marker_genes, class) {
     genes <- filter(classes, cells == class)$gene
@@ -317,7 +341,7 @@ get_gsea_scores <- function(markers, only_classes = NULL) {
     score <- cumsum(marker_genes$score)
     return(max(score, na.rm = TRUE))
   }
-  
+
   # for each cluster
   unique_classes <- sort(unique(classes$cells))
   if (!is.null(only_classes)) {
@@ -333,7 +357,7 @@ get_gsea_scores <- function(markers, only_classes = NULL) {
     scores <- scores / max(scores)
     return(scores)
   }
-  
+
   # for all clusters
   clusters <- sort(unique(markers$cluster))
   result <- map(clusters, get_cluster_gsea_scores)
@@ -347,7 +371,7 @@ simplify_conserved_markers <- function(markers) {
   if (!"gene" %in% colnames(markers)) {
     markers <- rownames_to_column(markers, "gene")
   }
-  
+
   # run logitp function from metap package to combine p values
   combine_p <- function(markers) {
     p_vals <- select(markers, ends_with("p_val_adj"))
@@ -358,12 +382,12 @@ simplify_conserved_markers <- function(markers) {
     return(p_vals)
   }
   p_vals <- combine_p(markers)
-  
+
   # calculate pct cells expressing gene and fold change
   pct1 <- rowMeans(select(markers, ends_with("pct.1")))
   pct2 <- rowMeans(select(markers, ends_with("pct.2")))
   fc <- rowMeans(select(markers, ends_with("avg_logFC")))
-  
+
   # select only relevant columns
   if ("cluster" %in% colnames(markers)) {
     markers <- select(markers, cluster, gene)
@@ -379,13 +403,13 @@ simplify_conserved_markers <- function(markers) {
 }
 
 # - Find all conserved markers -----------------------------------------------
-FindAllConservedMarkers <- function(object, ident2 = NULL, 
+FindAllConservedMarkers <- function(object, ident2 = NULL,
                                     groupby = NULL, clusters = NULL,
                                     verbose = FALSE) {
   if (is.null(clusters)) {
     clusters <- sort(unique(object@active.ident))
   }
-  
+
   # if there are < 3 cells per cluster per sample, run standard FindMarkers
   too_few <- table(object@active.ident, object@meta.data[,groupby]) %>%
     as.data.frame() %>%
@@ -405,9 +429,9 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
     few_markers <- mutate(few_markers, "note" = 'standard')
     clusters <- clusters[!clusters %in% too_few]
   }
-  
+
   # Run FindConservedMarkers on each cluster
-  markers <- map(clusters, 
+  markers <- map(clusters,
                  ~ FindConservedMarkers(object, .x, ident.2 = ident2,
                                         grouping.var = groupby,
                                         only.pos = TRUE,
@@ -418,16 +442,16 @@ FindAllConservedMarkers <- function(object, ident2 = NULL,
   markers <- map(clusters,
                  ~ mutate(markers[[which(clusters == .x)]], "cluster" = .x))
   markers <- bind_rows(markers)
-  
+
   # run logitp function from metap package to combine p values
   markers <- simplify_conserved_markers(markers)
-  
+
   # add standard FindMarkers results
   if (length(too_few) > 0) {
     markers <- bind_rows(markers, few_markers)
     markers <- mutate(markers, note = ifelse(is.na(note), 'conserved', note))
   }
-  
+
   # filter, arrange, and return final result
   markers <- filter(markers, p_val_adj < 0.05)
   markers <- markers %>%
@@ -446,7 +470,7 @@ summarize_markers <- function(markers) {
     complete(cluster) %>%
     mutate(total = ifelse(is.na(total), 0, total))
   if (length(unique(markers$note)) > 1) {
-    df <- left_join(df, select(filter(markers, !duplicated(cluster)), 
+    df <- left_join(df, select(filter(markers, !duplicated(cluster)),
                                cluster, note), by = "cluster")
   }
   return(df)
@@ -458,16 +482,16 @@ summarize_markers <- function(markers) {
 merge_markerless <- function(object, markers) {
   marker_summary <- summarize_markers(markers)
   markerless <- filter(marker_summary, total == 0)$cluster
-  
+
   # print clusters that don't have markers
   if (length(markerless) >= 1) {
-    print(paste("Cluster(s)", paste(markerless, collapse = ", "), 
+    print(paste("Cluster(s)", paste(markerless, collapse = ", "),
                 "have no significantly enriched genes. Merging with neighbors or dropping. ")
     )
   } else {
     return(object)
   }
-  
+
   # merge markerless clusters with nearest neighbor
   clusters <- unique(object@active.ident)
   mean_pcs <- map(clusters,
@@ -487,7 +511,7 @@ merge_markerless <- function(object, markers) {
     arrange(desc(corr)) %>%
     slice(1) %>%
     ungroup()
-  
+
   neighbors <- neighbors %>% mutate(
     "cluster" = factor(cluster, levels = levels(object@active.ident)),
     "neighbor" = factor(neighbor, levels = levels(object@active.ident))
@@ -514,14 +538,14 @@ merge_markerless <- function(object, markers) {
   for (i in 1:nrow(markerless_neighbors)) {
     # if both umap and corr are the same, merge clusters
     if (markerless_neighbors[i, ]$corr > mean_corr) {
-      object <- merge_cells(markerless_neighbors[i, ]$cluster, 
+      object <- merge_cells(markerless_neighbors[i, ]$cluster,
                             markerless_neighbors[i, ]$neighbor)
     } else {
       object <- drop_cells(markerless_neighbors[i, ]$cluster)
     }
   }
   # reset factor levels
-  object@active.ident <- factor(object@active.ident, 
+  object@active.ident <- factor(object@active.ident,
                                 levels = sort(unique(object@active.ident)))
   return(object)
 }
@@ -536,23 +560,23 @@ find_unique_genes <- function(object, genes = NULL, clusters = NULL,
   if (is.null(genes)) {
     genes <- rownames(mtx)
   }
-  
+
   cluster_expression <- function(mtx) {
     df <-
       map(clusters,
           ~ Matrix::rowMeans(mtx[genes, get_cells(object, .x)] > 0)
-      ) %>% 
+      ) %>%
       set_names(clusters)
     return(df)
   }
   df <- cluster_expression(mtx) %>% bind_cols()
-  
+
   # top 1 and 2 clusters for each gene
   first <- apply(df, 1, function(x) names(sort(x, decreasing = TRUE)[1]))
   second <- apply(df, 1, function(x) names(sort(x, decreasing = TRUE)[2]))
-  diff <- apply(df, 1, function(x) sort(x, decreasing = TRUE)[1] - 
+  diff <- apply(df, 1, function(x) sort(x, decreasing = TRUE)[1] -
                   sort(x, decreasing = TRUE)[2])
-  
+
   # result
   result <- data.frame(
     "gene" = genes,
@@ -560,11 +584,11 @@ find_unique_genes <- function(object, genes = NULL, clusters = NULL,
     "second" = second,
     "diff" = diff
   )
-  
+
   # set factor levels
-  result <- result %>% 
+  result <- result %>%
     mutate_at(vars(first, second), ~ factor(.x, levels = levels(object@active.ident)))
-  
+
   # keep top n
   result <- result %>%
     arrange(desc(diff)) %>%
@@ -572,7 +596,7 @@ find_unique_genes <- function(object, genes = NULL, clusters = NULL,
     slice(1:top_n) %>%
     ungroup() %>%
     arrange(first)
-  
+
   return(result)
 }
 
@@ -619,7 +643,7 @@ merge_clusters <- function(object, markers) {
     # find 2 neighbors for every cluster based UMAP distance
     clusters <- unique(object@active.ident)
     umap <- object@reductions$umap@cell.embeddings
-    cluster_means <- umap %>% 
+    cluster_means <- umap %>%
       mutate("cluster" = object@active.ident) %>%
       group_by(cluster) %>%
       summarize("UMAP1" = median(UMAP_1), "UMAP2" = median(UMAP_2)) %>%
@@ -635,16 +659,16 @@ merge_clusters <- function(object, markers) {
       arrange(dist) %>%
       slice(1:2) %>%
       ungroup()
-    
+
     # calculate deScore for all neighbors and merge most similar
-    neighbors$deScore <- apply(neighbors, 1, 
+    neighbors$deScore <- apply(neighbors, 1,
                                function(x) de_genes(object, x[1], x[2]))
     neighbors <- arrange(neighbors, deScore)
     neighbors <- neighbors %>% mutate(
       cluster = factor(cluster, levels = levels(object@active.ident)),
       neighbor = factor(neighbor, levels = levels(object@active.ident))
     )
-    
+
     if (sum(neighbors$deScore < 10) == 0) {
       break()
     } else {
@@ -664,11 +688,15 @@ merge_clusters <- function(object, markers) {
 eigengene <- function(object, genes) {
   # keep genes that have been scaled and are not NA in the scale.data slot
   genes <- genes[genes %in% rownames(object@assays$RNA@scale.data)]
-  genes <- genes[
-    sapply(genes, function(x) sum(is.na(object@assays$RNA@scale.data[x, ])) == 0)
-    ]
+  ##genes <- genes[
+  #sapply(genes, function(x) !any(is.na(object@assays$RNA@scale.data[x, ])))
+  #  ]
+  if (length(genes) == 1) {
+    return(object@assays$RNA@scale.data[genes, ])
+  }
   pca <- prcomp(t(object@assays$RNA@scale.data[genes, ]))
-  return(pca$x[, 1])
+  if (sign(median(pca$rotation[, 1])) == -1) { pca$x[,1] = -pca$x[,1]}
+  return(pca$x[,1])
 }
 
 # - Finding doublets ---------------------------------------------------------
@@ -697,16 +725,16 @@ find_doublet_clusters <- function(object, doublets) {
   expected_doublets <- predict(model,
     data.frame("cells" = ncol(object@assays$RNA@data)/
                  length(unique(object$mouse))))
-  
+
   # find actual doublet rates
-  cluster_rates <- table(object@active.ident, 
+  cluster_rates <- table(object@active.ident,
                          names(object@active.ident) %in% doublets
                          )
   above_threshold <- as.data.frame(cluster_rates) %>%
     group_by(Var1) %>%
     summarize("Rate" = Freq[Var2 == TRUE]/sum(Freq)) %>%
     filter(Rate > expected_doublets)
-  
+
   # if clusters have rates above expected, run a statistical test
   if (nrow(above_threshold) == 0) {
     cat("No clusters have more doublets than expected")
@@ -714,7 +742,7 @@ find_doublet_clusters <- function(object, doublets) {
   } else {
     cluster_rates <- as.matrix(cluster_rates)
     cluster_rates <- cluster_rates[above_threshold$Var1, ]
-    result <- map(cluster_rates, 
+    result <- map(cluster_rates,
                   ~ prop.test(.x, p = expected_doublets)$p.value)
     result <- unlist(result)
     names(result) <- rownames(cluster_rates)
@@ -749,7 +777,7 @@ grab_type <- function(object, classes, type) {
   class_genes <- read_csv("~/Programs/dropseq3/data/celltype_markers.csv")
   means <- cluster_means(object, genes = class_genes$gene)
   tree <- hclust(dist(t(means)))
-  
+
   # cut the tree at different levels and choose cut based on Youden's J
   youden <- function(cut) {
     new_clusters <- cutree(tree, cut)
@@ -773,7 +801,7 @@ grab_type <- function(object, classes, type) {
   js <- map_dbl(2:ncol(means), youden)
   names(js) <- 2:ncol(means)
   cut_to_use <- names(js)[js == max(js)][1]
-  
+
   # return cluster IDs associated with that cut
   new_clusters <- cutree(tree, cut_to_use)
   confusion <- table(new_clusters, classes$class == type) %>% as.data.frame()
@@ -801,7 +829,7 @@ cocluster_frequency <- function(object, iterations = 100) {
   clusters <- map(seq(iterations), ~ cluster_sample(object, .x))
   clusters <- map(clusters, ~ data.frame("cell" = names(.x), "cluster" = .x))
   clusters <- map(1:length(clusters), ~
-                    mutate(clusters[[.x]], "iter" = .x)) %>% 
+                    mutate(clusters[[.x]], "iter" = .x)) %>%
     bind_rows()
   write.csv(clusters, "clusters.csv", row.names = FALSE)
   # analyze results in python for speed
@@ -817,7 +845,7 @@ choose_coclustering_groups <- function(co, max_clusters = 50) {
   distances <- dist(co)
   tree <- hclust(distances)
   distances <- as.matrix(distances)
-  
+
   # get J scores
   calc_youden <- function(cut) {
     clusters <- cutree(tree, cut)
@@ -831,7 +859,7 @@ choose_coclustering_groups <- function(co, max_clusters = 50) {
   cuts <- seq(2, max_clusters)
   j <- map_dbl(cuts, calc_youden)
   names(j) <- cuts
-  
+
   # choose clustering with highest J
   clusters <- cutree(tree, as.integer(names(j)[j == max(j)]))
   return(clusters)
@@ -851,8 +879,8 @@ gene_test <- function(object, gene, cells_in, cells_out, test = "wilcox") {
   if (test == "wilcox") {
     if (check_gene(object, gene)) {
       p_val <- wilcox.test(
-        object@assays$RNA@data[gene, cells_in], 
-        object@assays$RNA@data[gene, cells_out], 
+        object@assays$RNA@data[gene, cells_in],
+        object@assays$RNA@data[gene, cells_out],
         alternative = "greater")$p.value
     } else {
       warning(paste(gene, "not in dataset"))
@@ -863,50 +891,49 @@ gene_test <- function(object, gene, cells_in, cells_out, test = "wilcox") {
   c("p_val" = p_val,
     "avg_logFC" = round(log(mean(object@assays$RNA@data[gene, cells_in])) -
                         log(mean(object@assays$RNA@data[gene, cells_out])), 3),
-    "pct.1" = round(sum(object@assays$RNA@counts[gene, cells_in] > 0) / 
+    "pct.1" = round(sum(object@assays$RNA@counts[gene, cells_in] > 0) /
                     length(cells_in), 3),
-    "pct.2" = round(sum(object@assays$RNA@counts[gene, cells_out] > 0) / 
+    "pct.2" = round(sum(object@assays$RNA@counts[gene, cells_out] > 0) /
                     length(cells_out), 3)
   )
 }
 
 # - Find conserved markers ---------------------------------------------------
-find_conserved_markers <- function(object, cluster, groupby, 
+find_conserved_markers <- function(object, cluster, groupby,
                                    other = NULL, remove_insig = TRUE,
                                    genes = NULL, progress_bar = TRUE) {
   groups <- unique(object@meta.data[, groupby])
   if (is.null(genes)) { genes <- rownames(object@assays$RNA@counts) }
-  print(paste0("Testing cluster ", cluster, ": ", 
+  print(paste0("Testing cluster ", cluster, ": ",
                length(genes), " genes from ",
                sum(object@active.ident == cluster), " cells across ",
-               length(groups), " groups (", 
+               length(groups), " groups (",
                format(Sys.time(), '%H:%M'), ")"))
-  
-  
+
   # functions to grab cells by cluster and group membership
   get_cells <- function(group) {
-    names(object@active.ident)[object@active.ident == cluster & 
+    names(object@active.ident)[object@active.ident == cluster &
                                  object@meta.data[,groupby] == group]
   }
   get_other <- function(group) {
     if (is.null(other)) {
-      names(object@active.ident)[object@active.ident != cluster & 
+      names(object@active.ident)[object@active.ident != cluster &
                                  object@meta.data[, groupby] == group]
     } else {
-      names(object@active.ident)[object@active.ident %in% other & 
+      names(object@active.ident)[object@active.ident %in% other &
                                  object@meta.data[, groupby] == group]
     }
   }
-  
+
   # run on all genes
   group_test <- function(gene) {
-    result <- sapply(groups, function(x) 
+    result <- sapply(groups, function(x)
       gene_test(object, gene, get_cells(x), get_other(x))
     )
     if (sum(is.na(result[1, ]) == length(result[1, ]))) {
       return(c("p_val" = NA, rowMeans(result[2:4,], na.rm = TRUE)))
     } else if (sum(!is.na(result[1,])) == 1) {
-      return(c("p_val" = result[1,][!is.na(result[1,])], 
+      return(c("p_val" = result[1,][!is.na(result[1,])],
                rowMeans(result[2:4,], na.rm = TRUE)))
     } else {
       return(c("p_val" = metap::logitp(result[1, ][!is.na(result[1, ])])$p,
@@ -919,9 +946,9 @@ find_conserved_markers <- function(object, cluster, groupby,
     mtx <- sapply(genes, group_test)
   }
   mtx <- t(mtx)
-  
+
   # adjust P value and export
-  mtx <- as.data.frame(mtx) %>% 
+  mtx <- as.data.frame(mtx) %>%
     mutate("p_val_adj" = p.adjust(p_val, method = "BH"),
            "cluster" = paste(cluster, collapse = ", "),
            "gene" = genes) %>%
@@ -937,8 +964,8 @@ find_all_conserved_markers <- function(object, groupby, remove_insig = TRUE,
   if (is.null(genes)) { genes <- rownames(object@assays$RNA@counts) }
   clusters <- sort(unique(object@active.ident))
   result <- map(
-    clusters, 
-    ~ find_conserved_markers(object, .x, groupby, 
+    clusters,
+    ~ find_conserved_markers(object, .x, groupby,
                              genes = genes, remove_insig = FALSE,
                              progress_bar = progress_bar)) %>%
     bind_rows() %>%
@@ -949,10 +976,10 @@ find_all_conserved_markers <- function(object, groupby, remove_insig = TRUE,
 }
 
 # - CELLEX --------------------------------------------------------------------
-cellex <- function(counts, clusters) {
+cellex <- function(counts, clusters, human = FALSE) {
   clusters <- data.frame("cluster" = clusters)
-  source_python("/home/alanrupp/Programs/dropseq3/python/CELLEX.py")
-  esmu <- run_cellex(counts, clusters)
+  source_python("~/Programs/dropseq3/python/CELLEX.py")
+  esmu <- run_cellex(counts, clusters, human)
   return(esmu)
 }
 
@@ -975,7 +1002,7 @@ traverse_tree <- function(object, genes = NULL, assay = "RNA",
     if (is.null(groupby)) {
       markers <- map(
         unique(clusters),
-        ~ FindMarkers(object, 
+        ~ FindMarkers(object,
                       ident.1 = names(clusters)[clusters == .x],
                       ident.2 = names(clusters)[clusters != .x],
                       features = genes, only.pos = TRUE, verbose = FALSE) %>%
@@ -986,7 +1013,7 @@ traverse_tree <- function(object, genes = NULL, assay = "RNA",
     } else {
       markers <- map(
         unique(clusters),
-        ~ FindConservedMarkers(object, 
+        ~ FindConservedMarkers(object,
                                ident.1 = names(clusters)[clusters == .x],
                                ident.2 = names(clusters)[clusters != .x],
                                grouping.var = groupby,
@@ -1001,7 +1028,7 @@ traverse_tree <- function(object, genes = NULL, assay = "RNA",
     }
     markers <- bind_rows(markers)
     # keep only the lowest p value for each gene
-    result <- markers %>% 
+    result <- markers %>%
       filter(p_val_adj < 0.05) %>%
       arrange(desc(pct.1 - pct.2)) %>%
       group_by(cluster) %>%
@@ -1048,19 +1075,19 @@ get_informative_genes <- function(object, markers, n = 1, clusters = NULL,
   markers <- filter(markers, pct.1 > pct.2)
   markers <- filter(markers, pct.2 < other_pct)
   markers <- filter(markers, p_val_adj < p_val_max)
-  markers <- markers %>% 
+  markers <- markers %>%
     group_by(cluster) %>%
-    arrange(desc(pct.1 - pct.2)) %>% 
+    arrange(desc(pct.1 - pct.2)) %>%
     dplyr::slice(1:n_genes)
-  if (nrow(markers) == 0) { stop("Not enough markers") }
+  if (nrow(markers) == 0) { return(NULL) }
   # function to return gene TP, TN, FP, FN, and J score
   gene_test <- function(gene, cluster) {
     if (length(gene) == 1) {
-      ct <- table(object@assays$RNA@counts[gene, ] > 0, 
+      ct <- table(object@assays$RNA@counts[gene, ] > 0,
                   object@active.ident == cluster)
     } else if (length(gene) > 1) {
       ct <- table(
-        Matrix::colSums(object@assays$RNA@counts[gene, ] > 0) == length(gene), 
+        Matrix::colSums(object@assays$RNA@counts[gene, ] > 0) == length(gene),
         object@active.ident == cluster
       )
     }
@@ -1086,10 +1113,10 @@ get_informative_genes <- function(object, markers, n = 1, clusters = NULL,
       result <- apply(genes, 1, function(x) gene_test(x, clstr))
       result <- map(result, ~ mutate(.x, gene = as.character(gene)))
       return(bind_rows(result))
-    } else { 
+    } else {
       return(data.frame("gene" = NA, "cluster" = cluster,
                         "TP" = NA, "TN" = NA, "FP" = NA, "FN" = NA, "J" = NA
-      )) 
+      ))
     }
   }
   # run on all clusters for all n values
@@ -1127,25 +1154,58 @@ name_clusters <- function(object, markers, other_pct = 0.2, n = 1,
 }
 
 # - Make pseudobulk -----------------------------------------------------------
-make_pseudobulk <- function(object, treatment, batch) {
-  clusters <- sort(unique(object@active.ident))
-  get_cells <- function(tx, btch = NULL) {
-    rownames(object@meta.data)[object@meta.data[, treatment] == tx &
-                                 object@meta.data[, batch] == btch]
-  }
-  generate_matrix <- function(cluster) {
-    groups <- expand.grid(unique(object@meta.data[, treatment]), 
-                          unique(object@meta.data[, batch]))
-    mtx <- apply(groups, 1, function(x) 
-      Matrix::rowSums(object@assays$RNA@counts[ 
-        , intersect(names(object@active.ident)[object@active.ident == cluster],
-                    get_cells(x["Var1"], x["Var2"]))
-        ])
+make_pseudobulk <- function(object, treatment, batch = NULL,
+                            data = "counts", assay = "RNA",
+                            progress_bar = TRUE) {
+  if (is.null(batch)) {
+    groups <- data.frame(
+      "Var1" = unique(object@meta.data[, treatment]),
+      "Var2" = rep(NA, length(unique(object@meta.data[, treatment])))
     )
-    colnames(mtx) <- paste(groups[,1], groups[,2], sep = "_")
+    print(groups)
+  } else {
+    groups <- expand.grid(unique(object@meta.data[, treatment]),
+                          unique(object@meta.data[, batch]))
+  }
+
+  get_cells <- function(tx, btch) {
+    if (!is.na(btch)) {
+      rownames(object@meta.data)[object@meta.data[, treatment] == tx &
+                                 object@meta.data[, batch] == btch]
+    } else {
+      rownames(object@meta.data)[object@meta.data[, treatment] == tx]
+    }
+  }
+  # generate matrix for each cluster
+  clusters <- sort(unique(object@active.ident))
+  generate_matrix <- function(cluster) {
+    if (data == "data") {
+      mtx <- apply(groups, 1, function(x)
+        Matrix::rowMeans(slot(object[[assay]], data)[
+          , intersect(names(object@active.ident)[object@active.ident == cluster],
+                      get_cells(x["Var1"], x["Var2"]))
+          ])
+      )
+    } else if (data == "counts") {
+      mtx <- apply(groups, 1, function(x)
+        Matrix::rowSums(slot(object[[assay]], data)[
+          , intersect(names(object@active.ident)[object@active.ident == cluster],
+                      get_cells(x["Var1"], x["Var2"]))
+          ])
+      )
+    }
+    if (is.null(batch)) {
+      colnames(mtx) <- groups[, 1]
+    } else {
+      colnames(mtx) <- paste(groups[, 1], groups[, 2], sep = "_")
+    }
     return(mtx)
   }
-  mtx <- map(clusters, generate_matrix)
+  if (progress_bar) {
+    mtx <- pbapply::pblapply(clusters, generate_matrix)
+  } else {
+    mtx <- map(clusters, generate_matrix)
+  }
   names(mtx) <- clusters
   return(mtx)
 }
@@ -1153,11 +1213,108 @@ make_pseudobulk <- function(object, treatment, batch) {
 # - Make pseudobulk metadata --------------------------------------------------
 make_pseudobulk_metadata <- function(pseudobulk) {
   # make sure all colnames in pseudobulk matrix are the same
-  if (!all(apply(sapply(pseudobulk, colnames), 1, 
+  if (!all(apply(sapply(pseudobulk, colnames), 1,
                  function(x) length(unique(x)) == 1) == TRUE)) {
     stop("Cluster matrices do not have consistent column names")
   } else {
-    df <- data.frame("Group" = colnames(pseudobulk[[1]])) %>%
-      separate(Group, into = c("Treatment", "Batch"), sep = "_")
+    df <- data.frame("Group" = colnames(pseudobulk[[1]]))
+    if (str_detect(colnames(pseudobulk[[1]]), "_")) {
+      df <- separate(df, Group, into = c("Treatment", "Batch"), sep = "_")
+    }
   }
+  return(df)
+}
+
+# - Get pseudotime ------------------------------------------------------------
+get_pseudotime <- function(object, cluster = NULL, method = "slingshot",
+                           genes = NULL) {
+  if (method == "slingshot") {
+    if (is.null(cluster)) { cluster <- "ident" }
+    if (is.null(genes)) { genes <- object@assays$RNA@var.features }
+    na_genes <- apply(object@assays$RNA@scale.data, 1, function(x) any(is.na(x)))
+    genes <- genes[genes %in% rownames(object@assays$RNA@scale.data)[!na_genes]]
+    print("Setting up SingleCellExperiment ...")
+    sce <- as.SingleCellExperiment(object)
+    print("Running PCA ...")
+    sce <- scater::runPCA(sce, ncomponents = 50, subset_row = genes)
+    print("Running slingshot ...")
+    sce <- slingshot::slingshot(sce, cluster, reducedDim = 'PCA')
+    pseudotime <- sce$slingPseudotime_1
+    names(pseudotime) <- rownames(sce@colData)
+    object@meta.data[, "pseudotime"] <- pseudotime
+  }
+  return(object)
+}
+
+# - Get pseudotime genes ------------------------------------------------------
+get_pseudotime_genes <- function(object, clusters = NULL, genes = NULL,
+                                 data = "data", assay = "RNA") {
+  if (is.null(cluster)) { clusters <- unique(object@active.ident) }
+  cells <- names(object@active.ident)[object@active.ident %in% clusters]
+  if (is.null(genes)) { genes <- rownames(slot(object[[assay]], data)) }
+  mtx <- slot(object[[assay]], data)[genes, cells]
+  # Fit GAM for each gene using pseudotime as independent variable.
+  pseudotime <- object@meta.data[cells, ]$pseudotime
+  pvals <- apply(mtx, 1, function(x) {
+    df <- data.frame(expr = x, pseudotime = pseudotime)
+    result <- gam::gam(expr ~ gam::lo(pseudotime), data = df)
+    p <- summary(result)[4][[1]][1,5]
+    p
+  })
+  pvals <- sort(pvals)
+  return(pvals)
+}
+
+
+# - Run edgeR -----------------------------------------------------------------
+run_edgeR <- function(object, cluster, treatment, batch = NULL) {
+  out_message <- paste(
+    "-- Running edgeR QLF DE testing for cluster", cluster,
+    levels(object@meta.data[, treatment])[2], "vs.",
+    levels(object@meta.data[, treatment])[1])
+  if (!is.null(batch)) {
+    out_message <- paste(out_message, "with", batch, "as a covariate --")
+  } else {
+    out_message <- paste(out_message, "--")
+  }
+  print(out_message)
+  # prepare edgeR object
+  object <- subset(object, idents = cluster)
+  y <- edgeR::DGEList(object@assays$RNA@counts)
+  print("Calculating normalization factors ...")
+  y <- edgeR::calcNormFactors(y)
+  print("Setting up model matrix ...")
+  if (is.null(batch)) {
+    design <- model.matrix(~ object@meta.data[, treatment])
+  } else {
+    design <- model.matrix(~ object@meta.data[, batch] +
+                             object@meta.data[, treatment])
+  }
+  print("Estimating dispersion ...")
+  y <- edgeR::estimateDisp(y, design)
+  print("Fitting model ...")
+  fit <- edgeR::glmQLFit(y, design)
+  print("Performing F test ...")
+  qlf <- edgeR::glmQLFTest(fit)
+  print("Detecting top DE genes ...")
+  tt <- as.data.frame(edgeR::topTags(qlf, n = Inf)) %>%
+    rownames_to_column("gene")
+  tt$cluster <- cluster
+  tt <- tt[, c("cluster", "gene", "logFC", "logCPM", "F", "PValue", "FDR")]
+  return(tt)
+}
+
+# - run WGCNA ----------------------------------------------------------------
+run_WGCNA <- function(object, genes = NULL, data = "data", assay = "RNA",
+                      power = 8, use_pseudobulk = FALSE) {
+  if (is.null(genes)) {
+    genes <- rownames(slot(object[[assay]], data))
+  }
+  mtx <- slot(object[[assay]], data)[genes, ]
+  print(paste("Running WGNCA::blockwiseModules for",
+              length(genes), "genes with power", power))
+  cor <- WGCNA::cor
+  net <- WGCNA::blockwiseModules(Matrix::t(mtx),
+                                 power = power, networkType = "signed")
+  return(net$colors)
 }
