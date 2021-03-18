@@ -641,7 +641,7 @@ rgb_plot <- function(object, red = NULL, green = NULL, blue = NULL,
 		     point_size = 0.8) {
   get_data <- function(color) {
     if (is.null(color)) {
-      return(0)
+      return(rep(0, ncol(object)))
     } else {
       d <- slot(slot(object, "assays")[[assay]], data)[color, ]
       d <- d / max(d)
