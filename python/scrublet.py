@@ -13,7 +13,7 @@ def find_expected_doublet_rate(mtx):
     expected_doublet_rate = lm.predict(np.array(n_cells).reshape(-1,1))[0,0] / 100
     return expected_doublet_rate
 
-def score_doublets(mtx, doublet_rate):
+def score_doublets(mtx, doublet_rate=0.1):
     scrub = scr.Scrublet(mtx.T, expected_doublet_rate=doublet_rate)
     doublet_scores, predicted_doublets = scrub.scrub_doublets()
     return doublet_scores
