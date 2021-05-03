@@ -177,7 +177,8 @@ find_variable_genes <- function(object, genes = NULL, assay = "RNA",
 scrublet <- function(mtx) {
   source_python("/home/alanrupp/Programs/dropseq3/python/scrublet.py")
   expected_doublet_rate <- find_expected_doublet_rate(mtx)
-  doublets <- score_doublets(mtx, expected_doublet_rate)
+  doublet_scores <- score_doublets(mtx, expected_doublet_rate)
+  doublets <- call_doublets(doublet_scores, expected_doublet_rate)
   gc(verbose = FALSE)
   return(doublets)
 }

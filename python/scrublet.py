@@ -16,6 +16,9 @@ def find_expected_doublet_rate(mtx):
 def score_doublets(mtx, doublet_rate):
     scrub = scr.Scrublet(mtx.T, expected_doublet_rate=doublet_rate)
     doublet_scores, predicted_doublets = scrub.scrub_doublets()
+    return doublet_scores
+
+def call_doublets(doublet_scores, doublet_rate):
     def manual_threshold(scores):
         top_n = int(doublet_rate * len(scores))
         sorted_scores = np.sort(scores)
@@ -24,21 +27,10 @@ def score_doublets(mtx, doublet_rate):
     # scrublet can be conservative -- making sure I get most doublets
     if scrub.threshold_ > 0.3 and sum(predicted_doublets) < (doublet_rate * len(doublet_scores))/2:
         threshold = manual_threshold(doublet_scores)
+        if threshold < 0.2:
+            threshold = 0.2
         doublets = scrub.call_doublets(threshold=threshold)
     else:
         doublets = scrub.call_doublets()
     return doublets
 
-if __name__ == '__main__':
-    from scipy import io
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('path', help='matrix folder location')
-    args = parser.parse_args()
-
-    # import mtx
-    mtx = io.mmread(f"{path}/matrix.mtx.gz")
-
-    # calcualte doublet rate and find doublets
-    doublet_rate = find_expected_doublet_rate(mtx)
-    doublets = score_doublets(mtx, doublet_rate)
