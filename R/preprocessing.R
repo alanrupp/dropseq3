@@ -123,7 +123,7 @@ filter_cells <- function(mtx, min_genes = 500) {
 rename_duplicates <- function(mtx) {
   if (sum(duplicated(colnames(do.call(cbind, mtx)))) > 0) {
     new_names <- function(dim) {
-      other <- unlist(map(mtx[-1], colnames))
+      other <- unlist(map(mtx[-dim], colnames))
       current <- colnames(mtx[[dim]])
       current <- ifelse(current %in% other, paste0(current, "-", dim), current)
       colnames(mtx[[dim]]) <- current
