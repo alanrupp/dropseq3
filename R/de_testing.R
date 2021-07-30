@@ -1229,12 +1229,12 @@ make_pseudobulk_metadata <- function(pseudobulk) {
 get_pseudotime <- function(object, cluster = NULL, method = "slingshot",
                            genes = NULL) {
   if (method == "slingshot") {
-    if (is.null(cluster)) { cluster <- "ident" }
-    if (is.null(genes)) { genes <- object@assays$RNA@var.features }
-    na_genes <- apply(object@assays$RNA@scale.data, 1, function(x) any(is.na(x)))
-    genes <- genes[genes %in% rownames(object@assays$RNA@scale.data)[!na_genes]]
+    if (is.null(cluster)) cluster <- "ident"
+    if (is.null(genes)) genes <- object[["RNA"]]@var.features
+    na_genes <- apply(object[["RNA"]]@scale.data, 1, function(x) any(is.na(x)))
+    genes <- genes[genes %in% rownames(object[["RNA"]]@scale.data)[!na_genes]]
     print("Setting up SingleCellExperiment ...")
-    sce <- as.SingleCellExperiment(object)
+    sce <- as.SingleCellExperiment(DietSeurat(object, graphs = "umap"))
     print("Running PCA ...")
     sce <- scater::runPCA(sce, ncomponents = 50, subset_row = genes)
     print("Running slingshot ...")
